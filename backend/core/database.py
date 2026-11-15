@@ -1,11 +1,21 @@
 import re
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from core.config import settings
+
+
+def _attach_sqlite_pragma(eng):
+    """Ativa foreign keys no SQLite para respeitar ON DELETE SET NULL/CASCADE como no MySQL."""
+    @event.listens_for(eng, "connect")
+    def _set_sqlite_pragma(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+    return eng
 
 
 def _build_engine():
@@ -42,17 +52,18 @@ def _build_engine():
             url_str = "sqlite:///./supermercado.db"
 
     if url_str == "sqlite:///:memory:":
-        return (
-            create_engine(
-                url_str,
-                connect_args={"check_same_thread": False},
-                poolclass=StaticPool,
-            ),
-            "sqlite-memory",
+        mem_engine = create_engine(
+            url_str,
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
         )
+        return _attach_sqlite_pragma(mem_engine), "sqlite-memory"
 
     connect_args = {"check_same_thread": False} if url_str.startswith("sqlite") else {}
-    return create_engine(url_str, connect_args=connect_args, pool_pre_ping=True), "sqlite"
+    eng = create_engine(url_str, connect_args=connect_args, pool_pre_ping=True)
+    if url_str.startswith("sqlite"):
+        _attach_sqlite_pragma(eng)
+    return eng, "sqlite"
 
 
 engine, ACTIVE_DATABASE_BACKEND = _build_engine()

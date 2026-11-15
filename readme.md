@@ -45,7 +45,7 @@ cd backend
 pytest test_api.py -v
 ```
 
-Valida CRUD de produtos, compra exata de **R$ 200,00** (sem desconto), compra de **R$ 250,00** (**5% de desconto = R$ 12,50**), baixa automática de estoque e bloqueio de estoque insuficiente.
+Valida os 13 cenários de API e persistência (CRUD completo, erros `404` e `422`, fronteira exata de **R$ 200,00** vs **R$ 200,01**, desconto de 5% acima de R$ 200,00, agrupamento de itens repetidos, baixa de estoque, exclusão de produto já vendido preservando histórico, rollback e fallback MySQL/SQLite).
 
 ### 3. Front-end (React + Vite)
 
@@ -54,6 +54,7 @@ Em outro terminal:
 ```bash
 cd frontend
 npm install
+npm test
 npm run dev
 ```
 

@@ -10,9 +10,11 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { formatBRL, formatDateTime } from '../utils/format'
-
-const LIMITE_DESCONTO_CENTAVOS = 20000 // R$ 200,00
+import {
+  calcularResumoCarrinho,
+  formatBRL,
+  formatDateTime,
+} from '../utils/format'
 
 export function CaixaView({
   produtos,
@@ -53,28 +55,7 @@ export function CaixaView({
     return map
   }, [carrinho])
 
-  // Cálculo exato em centavos para espelhar a regra de negócio do back-end (> R$ 200,00)
-  const resumo = useMemo(() => {
-    const brutoCentavos = carrinho.reduce((acc, item) => {
-      const unitCentavos = Math.round(Number(item.preco) * 100)
-      return acc + unitCentavos * item.quantidade
-    }, 0)
-
-    const teveDesconto = brutoCentavos > LIMITE_DESCONTO_CENTAVOS
-    const descontoCentavos = teveDesconto ? Math.round(brutoCentavos * 0.05) : 0
-    const finalCentavos = brutoCentavos - descontoCentavos
-    const faltamCentavos = teveDesconto ? 0 : LIMITE_DESCONTO_CENTAVOS + 1 - brutoCentavos
-    const progresso = Math.min(100, Math.round((brutoCentavos / (LIMITE_DESCONTO_CENTAVOS + 1)) * 100))
-
-    return {
-      bruto: brutoCentavos / 100,
-      desconto: descontoCentavos / 100,
-      final: finalCentavos / 100,
-      faltam: faltamCentavos / 100,
-      teveDesconto,
-      progresso,
-    }
-  }, [carrinho])
+  const resumo = useMemo(() => calcularResumoCarrinho(carrinho), [carrinho])
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">

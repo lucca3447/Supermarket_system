@@ -3,6 +3,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProdutoBase(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     nome: str = Field(..., min_length=2, max_length=100)
     categoria: str = Field(default="Mercearia", min_length=2, max_length=50)
     unidade: str = Field(default="un", min_length=1, max_length=15)
