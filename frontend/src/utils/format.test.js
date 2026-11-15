@@ -1,56 +1,64 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import { describe, expect, it } from 'vitest'
+import { api } from '../services/api'
 import {
   calcularResumoCarrinho,
   formatBRL,
   formatDateTime,
-} from './format.js'
+} from './format'
 
-test('carrinho vazio retorna zeros e falta R$ 200,01 para 5% OFF', () => {
-  const resumo = calcularResumoCarrinho([])
-  assert.deepEqual(resumo, {
-    bruto: 0,
-    desconto: 0,
-    final: 0,
-    faltam: 200.01,
-    teveDesconto: false,
-    progresso: 0,
+describe('format.js e api.js', () => {
+  it('carrinho vazio retorna zeros e falta R$ 200,01 para 5% OFF', () => {
+    const resumo = calcularResumoCarrinho([])
+    expect(resumo).toEqual({
+      bruto: 0,
+      desconto: 0,
+      final: 0,
+      faltam: 200.01,
+      teveDesconto: false,
+      progresso: 0,
+    })
   })
-})
 
-test('compra exata de R$ 200,00 nao aplica desconto e informa que falta R$ 0,01', () => {
-  const resumo = calcularResumoCarrinho([{ preco: '100.00', quantidade: 2 }])
-  assert.equal(resumo.bruto, 200)
-  assert.equal(resumo.desconto, 0)
-  assert.equal(resumo.final, 200)
-  assert.equal(resumo.faltam, 0.01)
-  assert.equal(resumo.teveDesconto, false)
-  assert.equal(resumo.progresso, 100)
-})
+  it('compra exata de R$ 200,00 nao aplica desconto e informa que falta R$ 0,01', () => {
+    const resumo = calcularResumoCarrinho([{ preco: '100.00', quantidade: 2 }])
+    expect(resumo.bruto).toBe(200)
+    expect(resumo.desconto).toBe(0)
+    expect(resumo.final).toBe(200)
+    expect(resumo.faltam).toBe(0.01)
+    expect(resumo.teveDesconto).toBe(false)
+    expect(resumo.progresso).toBe(100)
+  })
 
-test('compra de R$ 200,01 ativa desconto de 5%', () => {
-  const resumo = calcularResumoCarrinho([{ preco: '200.01', quantidade: 1 }])
-  assert.equal(resumo.bruto, 200.01)
-  assert.equal(resumo.desconto, 10)
-  assert.equal(resumo.final, 190.01)
-  assert.equal(resumo.faltam, 0)
-  assert.equal(resumo.teveDesconto, true)
-  assert.equal(resumo.progresso, 100)
-})
+  it('compra de R$ 200,01 ativa desconto de 5%', () => {
+    const resumo = calcularResumoCarrinho([{ preco: '200.01', quantidade: 1 }])
+    expect(resumo.bruto).toBe(200.01)
+    expect(resumo.desconto).toBe(10)
+    expect(resumo.final).toBe(190.01)
+    expect(resumo.faltam).toBe(0)
+    expect(resumo.teveDesconto).toBe(true)
+    expect(resumo.progresso).toBe(100)
+  })
 
-test('compra de R$ 250,00 aplica R$ 12,50 de desconto e totaliza R$ 237,50', () => {
-  const resumo = calcularResumoCarrinho([
-    { preco: '89.90', quantidade: 2 },
-    { preco: '70.20', quantidade: 1 },
-  ])
-  assert.equal(resumo.bruto, 250)
-  assert.equal(resumo.desconto, 12.5)
-  assert.equal(resumo.final, 237.5)
-  assert.equal(resumo.teveDesconto, true)
-})
+  it('compra de R$ 250,00 aplica R$ 12,50 de desconto e totaliza R$ 237,50', () => {
+    const resumo = calcularResumoCarrinho([
+      { preco: '89.90', quantidade: 2 },
+      { preco: '70.20', quantidade: 1 },
+    ])
+    expect(resumo.bruto).toBe(250)
+    expect(resumo.desconto).toBe(12.5)
+    expect(resumo.final).toBe(237.5)
+    expect(resumo.teveDesconto).toBe(true)
+  })
 
-test('formatBRL e formatDateTime formatam valores esperados', () => {
-  assert.match(formatBRL(237.5), /R\$\s*237,50/)
-  assert.equal(formatDateTime(null), 'Agora')
-  assert.match(formatDateTime('2026-11-15T17:30:00Z'), /\d{2}\/\d{2}\/\d{4}/)
+  it('formatBRL e formatDateTime formatam valores esperados', () => {
+    expect(formatBRL(237.5)).toMatch(/R\$\s*237,50/)
+    expect(formatBRL(null)).toMatch(/R\$\s*0,00/)
+    expect(formatDateTime(null)).toBe('Agora')
+    expect(formatDateTime('2026-11-15T17:30:00Z')).toMatch(/\d{2}\/\d{2}\/\d{4}/)
+  })
+
+  it('cliente Axios configura baseURL e header JSON', () => {
+    expect(api.defaults.baseURL).toBe('http://127.0.0.1:8000')
+    expect(api.defaults.headers['Content-Type']).toBe('application/json')
+  })
 })

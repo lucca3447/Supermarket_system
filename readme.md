@@ -54,9 +54,10 @@ Em outro terminal:
 ```bash
 cd frontend
 npm install
-npm test
+npm run test:coverage
 npm run dev
 ```
 
 - Interface rodando em: `http://localhost:5173`
+- Os testes em `frontend/src/App.test.jsx` e `frontend/src/utils/format.test.js` (Vitest + React Testing Library) cobrem **100% das linhas e funções** de `App.jsx`, `CaixaView.jsx`, `EstoqueView.jsx`, `HistoricoView.jsx`, `api.js` e `format.js`.
 
