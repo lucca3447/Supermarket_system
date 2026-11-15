@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Minus, PackagePlus, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { formatBRL } from '../utils/format'
+import { InsightEstoqueCard } from './InsightEstoqueCard'
 
 const FORM_INICIAL = {
   nome: '',
@@ -103,7 +104,14 @@ export function EstoqueView({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
+    <div>
+      <InsightEstoqueCard
+        produtos={produtos}
+        onAjustarEstoque={onAjustarEstoque}
+        salvando={salvando}
+      />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
       {/* Formulário CRUD */}
       <section className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-xs lg:col-span-4">
         <div className="flex items-center gap-2 text-mercado-800">
@@ -387,6 +395,7 @@ export function EstoqueView({
           )}
         </div>
       </section>
+      </div>
     </div>
   )
 }
