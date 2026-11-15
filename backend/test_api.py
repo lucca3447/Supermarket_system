@@ -1,8 +1,10 @@
+import json
 import os
 
 # Isola os testes do MySQL local antes de importar a aplicação
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -12,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 
 import core.database as database_module
 import main as main_module
+import services.insight_service as insight_module
 from core.database import Base, _attach_sqlite_pragma, get_db
 from main import app, seed_produtos_iniciais
 from models.produto_model import Produto
@@ -400,3 +403,200 @@ def test_get_db_abre_e_fecha_sessao(db_session_factory, monkeypatch):
     with pytest.raises(StopIteration):
         next(gen)
     assert fechada is True
+
+
+def test_insights_estoque_local_com_alertas_e_vendas(client, monkeypatch):
+    monkeypatch.setattr(insight_module.settings, "GEMINI_API_KEY", "")
+
+    p_esgotado = _criar_produto(client, nome="Café Esgotado", preco="30.00", estoque=0).json()
+    p_baixo = _criar_produto(client, nome="Salmão Baixo", preco="75.00", estoque=4).json()
+    p_vendido = _criar_produto(client, nome="Picanha Premium", preco="120.00", estoque=2).json()
+    _criar_produto(client, nome="Arroz Parado 5kg", preco="28.00", estoque=20)
+
+    # Venda acima de R$ 200 (ativa 5% OFF) e esgota Picanha ou deixa baixa
+    venda_res = client.post(
+        "/vendas/",
+        json={"itens": [{"id_produto": p_vendido["id_produto"], "quantidade": 2}]},
+    )
+    assert venda_res.status_code == 201
+
+    # Exclui o produto vendido para garantir que itens_venda com id_produto=NULL sejam tratados
+    del_res = client.delete(f"/produtos/{p_vendido['id_produto']}")
+    assert del_res.status_code == 200
+
+    # Vende 1 unidade de produto ainda existente para cobrir demanda com id_produto ativo
+    p_ativo = _criar_produto(client, nome="Feijão Carioca", preco="9.00", estoque=5).json()
+    client.post("/vendas/", json={"itens": [{"id_produto": p_ativo["id_produto"], "quantidade": 1}]})
+
+    res = client.get("/insights/estoque")
+    assert res.status_code == 200
+    body = res.json()
+
+    assert body["origem"] == "analise_local"
+    assert body["modelo"] is None
+    assert body["metricas"]["total_produtos"] == 4
+    assert body["metricas"]["itens_criticos"] == 1
+    assert body["metricas"]["itens_atencao"] == 2
+    assert body["metricas"]["total_vendas"] == 2
+    assert body["metricas"]["vendas_com_desconto"] == 1
+    assert body["metricas"]["faturamento_total"] == "237.00"
+
+    alertas = body["alertas"]
+    assert [a["id_produto"] for a in alertas] == [
+        p_esgotado["id_produto"],
+        p_ativo["id_produto"],
+        p_baixo["id_produto"],
+    ]
+    assert alertas[0]["nivel"] == "critico"
+    assert alertas[1]["nivel"] == "atencao"
+    assert len(body["recomendacoes"]) == 3
+    assert "Arroz Parado 5kg" in body["recomendacoes"][2]
+
+
+def test_insights_estoque_local_saudavel_sem_alertas_ou_parados(client, monkeypatch):
+    monkeypatch.setattr(insight_module.settings, "GEMINI_API_KEY", "")
+
+    p1 = _criar_produto(client, nome="Leite Integral", preco="6.00", estoque=10).json()
+    # Vende 1 unidade para tirar de "sem_giro" mantendo estoque >= 6
+    client.post("/vendas/", json={"itens": [{"id_produto": p1["id_produto"], "quantidade": 1}]})
+
+    res = client.get("/insights/estoque")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["origem"] == "analise_local"
+    assert body["alertas"] == []
+    assert "Estoque saudável" in body["resumo_executivo"]
+    assert "Conversão da regra de desconto" in body["recomendacoes"][2]
+
+    # Também cobre cenário sem nenhuma venda e sem produtos parados
+    p_novo = _criar_produto(client, nome="Azeite", preco="40.00", estoque=8).json()
+    assert p_novo["id_produto"] > 0
+
+
+def test_insights_estoque_local_sem_vendas(client, monkeypatch):
+    monkeypatch.setattr(insight_module.settings, "GEMINI_API_KEY", "")
+    _criar_produto(client, nome="Azeite", preco="40.00", estoque=8)
+
+    res = client.get("/insights/estoque")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["origem"] == "analise_local"
+    assert any("Registre novas vendas" in rec for rec in body["recomendacoes"])
+
+
+def test_insights_estoque_gemini_sucesso(client, monkeypatch):
+    monkeypatch.setattr(insight_module.settings, "GEMINI_API_KEY", "fake-gemini-key")
+    monkeypatch.setattr(insight_module.settings, "GEMINI_MODEL", "gemini-2.5-flash")
+    _criar_produto(client, nome="Café Especial", preco="35.00", estoque=0)
+
+    class _FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "text": json.dumps(
+                                        {
+                                            "resumo_executivo": "Há 1 item crítico exigindo reposição imediata.",
+                                            "recomendacoes": [
+                                                "Repor Café Especial hoje.",
+                                                "Criar combo acima de R$ 200,00.",
+                                            ],
+                                        }
+                                    )
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+
+    captured = {}
+
+    def fake_post(url, params=None, json=None, timeout=None):
+        captured["url"] = url
+        captured["params"] = params
+        captured["timeout"] = timeout
+        return _FakeResponse()
+
+    monkeypatch.setattr(insight_module.httpx, "post", fake_post)
+
+    res = client.get("/insights/estoque")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["origem"] == "gemini"
+    assert body["modelo"] == "gemini-2.5-flash"
+    assert body["resumo_executivo"] == "Há 1 item crítico exigindo reposição imediata."
+    assert len(body["recomendacoes"]) == 2
+    assert "gemini-2.5-flash:generateContent" in captured["url"]
+    assert captured["params"] == {"key": "fake-gemini-key"}
+
+
+def test_insights_estoque_gemini_fallback_em_falhas(client, monkeypatch):
+    monkeypatch.setattr(insight_module.settings, "GEMINI_API_KEY", "fake-gemini-key")
+    _criar_produto(client, nome="Café Especial", preco="35.00", estoque=2)
+
+    # 1. Timeout na chamada HTTP
+    def fake_timeout(*args, **kwargs):
+        raise httpx.TimeoutException("timeout")
+
+    monkeypatch.setattr(insight_module.httpx, "post", fake_timeout)
+    res_timeout = client.get("/insights/estoque")
+    assert res_timeout.status_code == 200
+    assert res_timeout.json()["origem"] == "analise_local"
+
+    # 2. JSON sem resumo ou recomendações válidas
+    class _InvalidPayloadResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [{"text": json.dumps({"resumo_executivo": "", "recomendacoes": []})}]
+                        }
+                    }
+                ]
+            }
+
+    monkeypatch.setattr(insight_module.httpx, "post", lambda *a, **kw: _InvalidPayloadResponse())
+    res_invalid = client.get("/insights/estoque")
+    assert res_invalid.status_code == 200
+    assert res_invalid.json()["origem"] == "analise_local"
+
+    # 3. Lista de recomendações só com strings vazias
+    class _BlankRecsResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "text": json.dumps(
+                                        {
+                                            "resumo_executivo": "Resumo válido",
+                                            "recomendacoes": ["   ", ""],
+                                        }
+                                    )
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+
+    monkeypatch.setattr(insight_module.httpx, "post", lambda *a, **kw: _BlankRecsResponse())
+    res_blank = client.get("/insights/estoque")
+    assert res_blank.status_code == 200
+    assert res_blank.json()["origem"] == "analise_local"

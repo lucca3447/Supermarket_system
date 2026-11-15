@@ -359,4 +359,119 @@ describe('Mercadinho Bom Preço — Fluxos completos', () => {
     expect(screen.getByText('Venda #002')).toBeInTheDocument()
     expect(screen.getByText('Sem desconto (até R$ 200,00)')).toBeInTheDocument()
   })
+
+  it('gera insights de estoque (Gemini, fallback local, erro e reposição rápida)', async () => {
+    let produtosAtuais = PRODUTOS_BASE.map((p) => ({ ...p }))
+
+    api.get.mockImplementation((url) => {
+      if (url === '/produtos/') return Promise.resolve({ data: produtosAtuais })
+      if (url === '/vendas/') return Promise.resolve({ data: VENDAS_BASE })
+      if (url === '/insights/estoque') {
+        return Promise.resolve({
+          data: {
+            origem: 'gemini',
+            modelo: 'gemini-2.5-flash',
+            resumo_executivo: 'Repor café esgotado imediatamente.',
+            recomendacoes: ['Repor Café Esgotado.', 'Destacar Picanha Bovina.'],
+            alertas: [
+              {
+                id_produto: 3,
+                nome: 'Café Esgotado',
+                categoria: 'Bebidas',
+                unidade: 'pct',
+                estoque_atual: 0,
+                nivel: 'critico',
+                sugestao_reposicao: 15,
+              },
+              {
+                id_produto: 1,
+                nome: 'Picanha Bovina',
+                categoria: 'Carnes',
+                unidade: 'kg',
+                estoque_atual: 3,
+                nivel: 'atencao',
+                sugestao_reposicao: 9,
+              },
+            ],
+            metricas: {
+              total_produtos: 3,
+              itens_criticos: 1,
+              itens_atencao: 1,
+              total_vendas: 2,
+              vendas_com_desconto: 1,
+              faturamento_total: '288.00',
+            },
+          },
+        })
+      }
+      return Promise.reject(new Error(`Rota não mockada: ${url}`))
+    })
+
+    api.put.mockImplementation((url, payload) => {
+      const id = Number(url.split('/').pop())
+      produtosAtuais = produtosAtuais.map((p) =>
+        p.id_produto === id ? { ...p, ...payload } : p,
+      )
+      return Promise.resolve({ data: { id_produto: id, ...payload } })
+    })
+
+    render(<App />)
+    await screen.findByText('Picanha Bovina')
+
+    fireEvent.click(screen.getByRole('button', { name: /Produtos e Estoque/i }))
+    expect(screen.getByText('Consultor de Estoque (IA)')).toBeInTheDocument()
+
+    // 1. Consulta com retorno Gemini AI e reposição rápida
+    fireEvent.click(screen.getByRole('button', { name: /Gerar Insights/i }))
+    expect(await screen.findByText('Gemini AI')).toBeInTheDocument()
+    expect(screen.getByText('Repor café esgotado imediatamente.')).toBeInTheDocument()
+    expect(screen.getByText('Repor Café Esgotado.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Repor +15' }))
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith(
+        '/produtos/3',
+        expect.objectContaining({ quantidade_estoque: 15 }),
+      ),
+    )
+
+    // 2. Consulta com fallback local e sem alertas
+    api.get.mockImplementation((url) => {
+      if (url === '/produtos/') return Promise.resolve({ data: produtosAtuais })
+      if (url === '/vendas/') return Promise.resolve({ data: VENDAS_BASE })
+      if (url === '/insights/estoque') {
+        return Promise.resolve({
+          data: {
+            origem: 'analise_local',
+            modelo: null,
+            resumo_executivo: 'Estoque saudável.',
+            recomendacoes: ['Manter ritmo atual.'],
+            alertas: [],
+            metricas: {
+              total_produtos: 3,
+              itens_criticos: 0,
+              itens_atencao: 0,
+              total_vendas: 2,
+              vendas_com_desconto: 1,
+              faturamento_total: '288.00',
+            },
+          },
+        })
+      }
+      return Promise.reject(new Error(`Rota não mockada: ${url}`))
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Gerar Insights/i }))
+    expect(await screen.findByText('Análise Local (Fallback)')).toBeInTheDocument()
+    expect(
+      screen.getByText('Nenhum item crítico ou com estoque baixo no momento.'),
+    ).toBeInTheDocument()
+
+    // 3. Erro na rota de insights
+    api.get.mockImplementationOnce(() => Promise.reject(new Error('Falha')))
+    fireEvent.click(screen.getByRole('button', { name: /Gerar Insights/i }))
+    expect(
+      await screen.findByText('Não foi possível gerar os insights de estoque agora.'),
+    ).toBeInTheDocument()
+  })
 })

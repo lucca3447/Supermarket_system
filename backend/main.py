@@ -6,6 +6,7 @@ from core.config import settings
 from core.database import ACTIVE_DATABASE_BACKEND, Base, SessionLocal, engine
 from models.produto_model import Produto
 from models.venda_model import ItemVenda, Venda  # noqa: F401 - garante registro das tabelas no metadata
+from routers.insight_router import router as insight_router
 from routers.produto_router import router as produto_router
 from routers.venda_router import router as venda_router
 
@@ -56,6 +57,7 @@ app.add_middleware(
 
 app.include_router(produto_router)
 app.include_router(venda_router)
+app.include_router(insight_router)
 
 
 @app.get("/")
