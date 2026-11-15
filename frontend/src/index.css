@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-serif: "Fraunces", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-kraft-50: #F6F4EE;
+  --color-kraft-100: #ECE8DC;
+  --color-kraft-200: #DDD6C3;
+  --color-mercado-700: #166534;
+  --color-mercado-800: #14532D;
+  --color-mercado-900: #0F3D21;
+  --color-oferta-400: #FACC15;
+  --color-oferta-950: #422006;
+  --color-bobina: #FFFDF7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-kraft-50);
+  color: #1C1917;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display {
+  font-family: var(--font-serif);
+}
+
+.font-fiscal {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Recorte serrilhado de bobina térmica no topo e na base do cupom */
+.receipt-zig-top {
+  height: 10px;
+  background:
+    linear-gradient(-45deg, var(--color-bobina) 5px, transparent 0),
+    linear-gradient(45deg, var(--color-bobina) 5px, transparent 0);
+  background-size: 10px 10px;
+  background-repeat: repeat-x;
+}
+
+.receipt-zig-bottom {
+  height: 10px;
+  background:
+    linear-gradient(-135deg, var(--color-bobina) 5px, transparent 0),
+    linear-gradient(135deg, var(--color-bobina) 5px, transparent 0);
+  background-size: 10px 10px;
+  background-repeat: repeat-x;
+}
