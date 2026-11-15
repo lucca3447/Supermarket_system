@@ -346,3 +346,57 @@ def test_database_build_engine_mysql_fallback_e_validacao(monkeypatch, tmp_path)
         assert backend == "sqlite"
     finally:
         eng.dispose()
+
+
+def test_database_build_engine_mysql_cria_schema_quando_disponivel(monkeypatch):
+    sqls_executados = []
+
+    class _FakeConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute(self, stmt):
+            sqls_executados.append(str(stmt))
+
+    class _FakeEngine:
+        def begin(self):
+            return _FakeConn()
+
+        def connect(self):
+            return _FakeConn()
+
+        def dispose(self):
+            pass
+
+    monkeypatch.setattr(
+        database_module.settings,
+        "DATABASE_URL",
+        "mysql+pymysql://root:@localhost:3306/supermercado_tde",
+    )
+    monkeypatch.setattr(database_module, "create_engine", lambda *a, **kw: _FakeEngine())
+
+    eng, backend = database_module._build_engine()
+    assert backend == "mysql"
+    assert isinstance(eng, _FakeEngine)
+    assert any("CREATE DATABASE IF NOT EXISTS `supermercado_tde`" in sql for sql in sqls_executados)
+
+
+def test_get_db_abre_e_fecha_sessao(db_session_factory, monkeypatch):
+    monkeypatch.setattr(database_module, "SessionLocal", db_session_factory)
+    gen = get_db()
+    db = next(gen)
+    fechada = False
+    original_close = db.close
+
+    def tracked_close():
+        nonlocal fechada
+        fechada = True
+        original_close()
+
+    monkeypatch.setattr(db, "close", tracked_close)
+    with pytest.raises(StopIteration):
+        next(gen)
+    assert fechada is True

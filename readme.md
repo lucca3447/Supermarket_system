@@ -42,10 +42,10 @@ uvicorn main:app --reload
 
 ```bash
 cd backend
-pytest test_api.py -v
+pytest test_api.py -v --cov=. --cov-report=term-missing
 ```
 
-Valida os 13 cenários de API e persistência (CRUD completo, erros `404` e `422`, fronteira exata de **R$ 200,00** vs **R$ 200,01**, desconto de 5% acima de R$ 200,00, agrupamento de itens repetidos, baixa de estoque, exclusão de produto já vendido preservando histórico, rollback e fallback MySQL/SQLite).
+Valida os 15 cenários de API, banco e persistência com **100% de cobertura** no back-end (CRUD completo, erros `404` e `422`, fronteira exata de **R$ 200,00** vs **R$ 200,01**, desconto de 5% acima de R$ 200,00, agrupamento de itens repetidos, baixa de estoque, exclusão de produto já vendido preservando histórico, rollback, ciclo `get_db` e criação/fallback MySQL→SQLite).
 
 ### 3. Front-end (React + Vite)
 
