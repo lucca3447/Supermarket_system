@@ -30,7 +30,7 @@ def _build_engine():
                 if not re.fullmatch(r"[A-Za-z0-9_]+", db_name):
                     raise ValueError(f"Nome de banco inválido: {db_name}")
                 root_engine = create_engine(
-                    url.set(database=None),
+                    url.set(database=""),
                     connect_args={"connect_timeout": 2},
                 )
                 with root_engine.begin() as conn:

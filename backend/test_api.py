@@ -353,6 +353,7 @@ def test_database_build_engine_mysql_fallback_e_validacao(monkeypatch, tmp_path)
 
 def test_database_build_engine_mysql_cria_schema_quando_disponivel(monkeypatch):
     sqls_executados = []
+    urls_chamadas = []
 
     class _FakeConn:
         def __enter__(self):
@@ -379,11 +380,17 @@ def test_database_build_engine_mysql_cria_schema_quando_disponivel(monkeypatch):
         "DATABASE_URL",
         "mysql+pymysql://root:@localhost:3306/supermercado_tde",
     )
-    monkeypatch.setattr(database_module, "create_engine", lambda *a, **kw: _FakeEngine())
+
+    def fake_create_engine(url, *a, **kw):
+        urls_chamadas.append(url)
+        return _FakeEngine()
+
+    monkeypatch.setattr(database_module, "create_engine", fake_create_engine)
 
     eng, backend = database_module._build_engine()
     assert backend == "mysql"
     assert isinstance(eng, _FakeEngine)
+    assert urls_chamadas[0].database == ""
     assert any("CREATE DATABASE IF NOT EXISTS `supermercado_tde`" in sql for sql in sqls_executados)
 
 
