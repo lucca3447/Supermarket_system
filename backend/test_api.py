@@ -493,7 +493,7 @@ def test_insights_estoque_local_sem_vendas(client, monkeypatch):
 
 def test_insights_estoque_gemini_sucesso(client, monkeypatch):
     monkeypatch.setattr(insight_module.settings, "GEMINI_API_KEY", "fake-gemini-key")
-    monkeypatch.setattr(insight_module.settings, "GEMINI_MODEL", "gemini-2.5-flash")
+    monkeypatch.setattr(insight_module.settings, "GEMINI_MODEL", "gemini-3.1-flash-lite")
     _criar_produto(client, nome="Café Especial", preco="35.00", estoque=0)
 
     class _FakeResponse:
@@ -537,10 +537,10 @@ def test_insights_estoque_gemini_sucesso(client, monkeypatch):
     assert res.status_code == 200
     body = res.json()
     assert body["origem"] == "gemini"
-    assert body["modelo"] == "gemini-2.5-flash"
+    assert body["modelo"] == "gemini-3.1-flash-lite"
     assert body["resumo_executivo"] == "Há 1 item crítico exigindo reposição imediata."
     assert len(body["recomendacoes"]) == 2
-    assert "gemini-2.5-flash:generateContent" in captured["url"]
+    assert "gemini-3.1-flash-lite:generateContent" in captured["url"]
     assert captured["params"] == {"key": "fake-gemini-key"}
 
 

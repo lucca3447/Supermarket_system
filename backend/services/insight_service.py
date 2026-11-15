@@ -168,14 +168,16 @@ class InsightService:
             f"Dados: {json.dumps(resumo_dados, ensure_ascii=False)}"
         )
 
-        url = GEMINI_ENDPOINT.format(model=settings.GEMINI_MODEL.strip() or "gemini-2.5-flash")
+        url = GEMINI_ENDPOINT.format(
+            model=settings.GEMINI_MODEL.strip() or "gemini-3.1-flash-lite"
+        )
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"responseMimeType": "application/json"},
         }
 
         try:
-            response = httpx.post(url, params={"key": api_key}, json=payload, timeout=8.0)
+            response = httpx.post(url, params={"key": api_key}, json=payload, timeout=15.0)
             response.raise_for_status()
             data = response.json()
             texto = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -199,7 +201,8 @@ class InsightService:
                 "resumo_executivo": resumo.strip(),
                 "recomendacoes": recomendacoes_limpas,
             }
-        except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError):
+        except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
+            print(f"[AVISO] Gemini indisponível ({exc}). Usando análise local.")
             return None
 
     def _gerar_analise_local(self, diagnostico: dict) -> dict:

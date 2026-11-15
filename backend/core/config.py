@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "mysql+pymysql://root:@localhost:3306/supermercado_tde"
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3.1-flash-lite"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

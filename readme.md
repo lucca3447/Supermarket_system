@@ -29,7 +29,7 @@ Arquitetura do back-end em camadas: `routers/` (HTTP) → `services/` (regras de
 ### 1. Back-end (FastAPI + MySQL)
 
 > Por padrão (`backend/.env`), o sistema conecta no MySQL local (`mysql+pymysql://root:@localhost:3306/supermercado_tde`) e **cria o banco `supermercado_tde`, as tabelas e 10 produtos iniciais automaticamente**. Se o MySQL estiver parado, ele usa SQLite local (`supermercado.db`) para não travar.
-> Opcionalmente, defina `GEMINI_API_KEY` em `backend/.env` para ativar recomendações geradas pelo modelo `gemini-2.5-flash` em `GET /insights/estoque` (sem chave ou sem internet, o sistema usa automaticamente o motor analítico local).
+> Opcionalmente, defina `GEMINI_API_KEY` em `backend/.env` para ativar recomendações geradas pelo modelo `gemini-3.1-flash-lite` em `GET /insights/estoque` (sem chave ou sem internet, o sistema usa automaticamente o motor analítico local).
 
 ```bash
 cd backend
