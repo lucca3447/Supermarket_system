@@ -11,12 +11,14 @@ Aplicação full-stack de supermercado desenvolvida com **FastAPI + SQLAlchemy +
 
 ## Onde está cada requisito no código
 
+Arquitetura do back-end em camadas: `routers/` (HTTP) → `services/` (regras de negócio) → `repositories/` (persistência SQLAlchemy) → `models/` (tabelas).
+
 | Requisito | Back-end | Front-end |
 | :--- | :--- | :--- |
-| **CRUD de Produtos** | `backend/routers/produto_router.py` (`GET`, `POST`, `PUT`, `DELETE /produtos/`) | `frontend/src/components/EstoqueView.jsx` (aba *Produtos e Estoque*) |
-| **Simulação de Compra** | `backend/routers/venda_router.py` (`POST /vendas/`) | `frontend/src/components/CaixaView.jsx` (aba *Caixa / Simulação*) |
-| **Baixa Automática de Estoque** | `backend/routers/venda_router.py` (`produto.quantidade_estoque -= quantidade`) | Atualização imediata da gôndola e tabela após `POST /vendas/` |
-| **Desconto de 5% (> R$ 200,00)** | `backend/routers/venda_router.py` (`if valor_bruto > LIMITE_DESCONTO`) | Medidor ao vivo no cupom fiscal (`CaixaView.jsx`) e histórico (`HistoricoView.jsx`) |
+| **CRUD de Produtos** | `backend/routers/produto_router.py` → `backend/services/produto_service.py` → `backend/repositories/produto_repository.py` | `frontend/src/components/EstoqueView.jsx` (aba *Produtos e Estoque*) |
+| **Simulação de Compra** | `backend/routers/venda_router.py` → `backend/services/venda_service.py` → `backend/repositories/venda_repository.py` | `frontend/src/components/CaixaView.jsx` (aba *Caixa / Simulação*) |
+| **Baixa Automática de Estoque** | `backend/services/venda_service.py` (`produto.quantidade_estoque -= quantidade`) | Atualização imediata da gôndola e tabela após `POST /vendas/` |
+| **Desconto de 5% (> R$ 200,00)** | `backend/services/venda_service.py` (`if valor_bruto > LIMITE_DESCONTO`) | Medidor ao vivo no cupom fiscal (`CaixaView.jsx`) e histórico (`HistoricoView.jsx`) |
 | **Modelagem no Banco** | `backend/models/produto_model.py` e `backend/models/venda_model.py` | — |
 
 ---
