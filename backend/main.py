@@ -1,6 +1,8 @@
+from contextlib import asynccontextmanager
 from decimal import Decimal
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import IntegrityError
 
 from core.config import settings
 from core.database import ACTIVE_DATABASE_BACKEND, Base, SessionLocal, engine
@@ -31,41 +33,52 @@ def seed_produtos_iniciais():
     """Popula o catálogo inicial apenas se a tabela de produtos estiver vazia."""
     with SessionLocal() as db:
         if db.query(Produto).count() == 0:
-            db.add_all(Produto(**item) for item in PRODUTOS_INICIAIS)
-            db.commit()
+            try:
+                db.add_all(Produto(**item) for item in PRODUTOS_INICIAIS)
+                db.commit()
+            except IntegrityError:
+                db.rollback()
 
 
 def seed_usuarios_iniciais():
     """Garante os perfis padrão de demonstração (gerente e cliente) se não houver usuários."""
     with SessionLocal() as db:
         if db.query(Usuario).count() == 0:
-            db.add_all(
-                [
-                    Usuario(
-                        nome="Gerente do Mercado",
-                        login="gerente",
-                        senha_hash=gerar_hash_senha("gerente123"),
-                        perfil="gerente",
-                    ),
-                    Usuario(
-                        nome="Cliente Padrão",
-                        login="cliente",
-                        senha_hash=gerar_hash_senha("cliente123"),
-                        perfil="cliente",
-                    ),
-                ]
-            )
-            db.commit()
+            try:
+                db.add_all(
+                    [
+                        Usuario(
+                            nome="Gerente do Mercado",
+                            login="gerente",
+                            senha_hash=gerar_hash_senha("gerente123"),
+                            perfil="gerente",
+                        ),
+                        Usuario(
+                            nome="Cliente Padrão",
+                            login="cliente",
+                            senha_hash=gerar_hash_senha("cliente123"),
+                            perfil="cliente",
+                        ),
+                    ]
+                )
+                db.commit()
+            except IntegrityError:
+                db.rollback()
 
 
-Base.metadata.create_all(bind=engine)
-seed_produtos_iniciais()
-seed_usuarios_iniciais()
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    seed_produtos_iniciais()
+    seed_usuarios_iniciais()
+    yield
+
 
 app = FastAPI(
     title="Sistema de Supermercado — TDE Back-End",
     description="API REST para CRUD de produtos, controle de estoque e vendas com desconto progressivo.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 allowed_origins = [
