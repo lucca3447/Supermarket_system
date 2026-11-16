@@ -30,6 +30,9 @@ const ROTAS_AUTH_SEM_RETRY = [
 const ROTAS_EMITEM_TOKEN = ['/auth/login', '/auth/registrar', '/auth/refresh']
 
 api.interceptors.request.use((config) => {
+  if (!import.meta.env.DEV && config.url && config.url.length > 1) {
+    config.url = config.url.replace(/\/+(?=\?|$)/, '')
+  }
   if (accessTokenMemoria && config.headers) {
     config.headers.Authorization = `Bearer ${accessTokenMemoria}`
   }
