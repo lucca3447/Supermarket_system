@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime, timedelta, timezone
 
 # Isola os testes do MySQL local antes de importar a aplicação
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
@@ -7,6 +8,7 @@ os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from jose import jwt
 from sqlalchemy import create_engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
@@ -15,9 +17,12 @@ from sqlalchemy.pool import StaticPool
 import core.database as database_module
 import main as main_module
 import services.insight_service as insight_module
+from core.config import settings
 from core.database import Base, _attach_sqlite_pragma, get_db
-from main import app, seed_produtos_iniciais
+from core.security import ALGORITHM, criar_access_token
+from main import app, seed_produtos_iniciais, seed_usuarios_iniciais
 from models.produto_model import Produto
+from models.usuario_model import RefreshToken, Usuario
 from models.venda_model import Venda
 from repositories.venda_repository import VendaRepository
 
@@ -40,7 +45,7 @@ def db_session_factory():
 
 
 @pytest.fixture()
-def client(db_session_factory):
+def raw_client(db_session_factory):
     def override_get_db():
         db = db_session_factory()
         try:
@@ -52,6 +57,18 @@ def client(db_session_factory):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def client(raw_client, db_session_factory, monkeypatch):
+    monkeypatch.setattr(main_module, "SessionLocal", db_session_factory)
+    seed_usuarios_iniciais()
+    login_res = raw_client.post(
+        "/auth/login",
+        json={"login": "gerente", "senha": "gerente123"},
+    )
+    assert login_res.status_code == 200
+    return raw_client
 
 
 def _criar_produto(client, nome="Produto Teste", preco="50.00", estoque=10, categoria="Mercearia", unidade="un"):
@@ -607,3 +624,187 @@ def test_insights_estoque_gemini_fallback_em_falhas(client, monkeypatch):
     res_blank = client.get("/insights/estoque")
     assert res_blank.status_code == 200
     assert res_blank.json()["origem"] == "analise_local"
+
+
+def test_seed_usuarios_iniciais_idempotente(db_session_factory, monkeypatch):
+    monkeypatch.setattr(main_module, "SessionLocal", db_session_factory)
+
+    seed_usuarios_iniciais()
+    with db_session_factory() as db:
+        assert db.query(Usuario).count() == 2
+
+    seed_usuarios_iniciais()
+    with db_session_factory() as db:
+        assert db.query(Usuario).count() == 2
+
+
+def test_auth_login_cookies_httponly_refresh_e_logout(raw_client, db_session_factory, monkeypatch):
+    monkeypatch.setattr(main_module, "SessionLocal", db_session_factory)
+    seed_usuarios_iniciais()
+
+    # Sem autenticação: 401 nas rotas privadas e em /auth/me e /auth/refresh
+    assert raw_client.get("/auth/me").status_code == 401
+    assert raw_client.get("/produtos/").status_code == 401
+    assert raw_client.post("/auth/refresh").status_code == 401
+
+    # Login inválido: 401
+    bad_login = raw_client.post("/auth/login", json={"login": "gerente", "senha": "errada"})
+    assert bad_login.status_code == 401
+
+    # Login válido define cookies HttpOnly access_token e refresh_token
+    ok_login = raw_client.post("/auth/login", json={"login": "gerente", "senha": "gerente123"})
+    assert ok_login.status_code == 200
+    body = ok_login.json()
+    assert body["usuario"]["perfil"] == "gerente"
+    set_cookie_headers = ok_login.headers.get_list("set-cookie")
+    assert any("access_token=" in h and "HttpOnly" in h for h in set_cookie_headers)
+    assert any("refresh_token=" in h and "HttpOnly" in h for h in set_cookie_headers)
+
+    # /auth/me autenticado por cookie
+    me_res = raw_client.get("/auth/me")
+    assert me_res.status_code == 200
+    assert me_res.json()["login"] == "gerente"
+
+    # /auth/refresh rotaciona o refresh token no banco
+    with db_session_factory() as db:
+        assert db.query(RefreshToken).filter_by(revoked=False).count() == 1
+
+    refresh_res = raw_client.post("/auth/refresh")
+    assert refresh_res.status_code == 200
+    with db_session_factory() as db:
+        assert db.query(RefreshToken).filter_by(revoked=True).count() == 1
+        assert db.query(RefreshToken).filter_by(revoked=False).count() == 1
+
+    # Logout revoga o refresh token ativo e limpa os cookies
+    logout_res = raw_client.post("/auth/logout")
+    assert logout_res.status_code == 200
+    with db_session_factory() as db:
+        assert db.query(RefreshToken).filter_by(revoked=False).count() == 0
+
+    # Logout sem cookie continua seguro (no-op)
+    assert raw_client.post("/auth/logout").status_code == 200
+
+    # Após logout, /auth/me falha com 401
+    assert raw_client.get("/auth/me").status_code == 401
+
+
+def test_auth_registro_duplicado_e_rbac_cliente_vs_gerente(raw_client, db_session_factory, monkeypatch):
+    monkeypatch.setattr(main_module, "SessionLocal", db_session_factory)
+    seed_usuarios_iniciais()
+
+    # Cria um produto autenticado como gerente via Bearer (para validar fallback HTTPBearer)
+    gerente_login = raw_client.post(
+        "/auth/login", json={"login": "gerente", "senha": "gerente123"}
+    ).json()
+    raw_client.cookies.clear()
+    gerente_headers = {"Authorization": f"Bearer {gerente_login['access_token']}"}
+
+    produto = raw_client.post(
+        "/produtos/",
+        headers=gerente_headers,
+        json={
+            "nome": "Queijo Minas",
+            "categoria": "Laticínios",
+            "unidade": "un",
+            "preco": "25.00",
+            "quantidade_estoque": 10,
+        },
+    ).json()
+
+    # Registro de novo cliente via /auth/registrar
+    reg_res = raw_client.post(
+        "/auth/registrar",
+        json={"nome": "Maria Silva", "login": "maria", "senha": "maria123"},
+    )
+    assert reg_res.status_code == 201
+    assert reg_res.json()["usuario"]["perfil"] == "cliente"
+
+    # Login duplicado retorna 409 Conflict
+    dup_res = raw_client.post(
+        "/auth/registrar",
+        json={"nome": "Outra Maria", "login": "maria", "senha": "maria123"},
+    )
+    assert dup_res.status_code == 409
+
+    # Cliente pode listar produtos e finalizar compra, mas recebe 403 nas rotas de gerente
+    assert raw_client.get("/produtos/").status_code == 200
+    assert raw_client.get(f"/produtos/{produto['id_produto']}").status_code == 200
+    assert (
+        raw_client.post(
+            "/vendas/",
+            json={"itens": [{"id_produto": produto["id_produto"], "quantidade": 1}]},
+        ).status_code
+        == 201
+    )
+
+    assert raw_client.post("/produtos/", json={"nome": "X", "preco": "1.00", "quantidade_estoque": 1}).status_code == 403
+    assert raw_client.put(f"/produtos/{produto['id_produto']}", json={"nome": "X", "categoria": "G", "unidade": "un", "preco": "1.00", "quantidade_estoque": 1}).status_code == 403
+    assert raw_client.delete(f"/produtos/{produto['id_produto']}").status_code == 403
+    assert raw_client.get("/vendas/").status_code == 403
+    assert raw_client.get("/insights/estoque").status_code == 403
+
+
+def test_auth_tokens_invalidos_expirados_e_usuario_removido(raw_client, db_session_factory, monkeypatch):
+    monkeypatch.setattr(main_module, "SessionLocal", db_session_factory)
+    seed_usuarios_iniciais()
+
+    # Token malformado
+    assert (
+        raw_client.get("/auth/me", headers={"Authorization": "Bearer token-invalido"}).status_code
+        == 401
+    )
+
+    # Token expirado
+    token_expirado = criar_access_token(1, "gerente", expires_delta=timedelta(seconds=-5))
+    assert (
+        raw_client.get("/auth/me", headers={"Authorization": f"Bearer {token_expirado}"}).status_code
+        == 401
+    )
+
+    # Token com sub não numérico
+    token_sub_invalido = jwt.encode(
+        {
+            "sub": "abc",
+            "type": "access",
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+        },
+        settings.SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+    assert (
+        raw_client.get("/auth/me", headers={"Authorization": f"Bearer {token_sub_invalido}"}).status_code
+        == 401
+    )
+
+    # Token de usuário inexistente no banco
+    token_fantasma = criar_access_token(99999, "gerente")
+    assert (
+        raw_client.get("/auth/me", headers={"Authorization": f"Bearer {token_fantasma}"}).status_code
+        == 401
+    )
+
+    # Refresh token expirado ou com usuário inexistente
+    raw_client.post("/auth/login", json={"login": "cliente", "senha": "cliente123"})
+    with db_session_factory() as db:
+        rt = db.query(RefreshToken).first()
+        rt.expires_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=1)
+        db.commit()
+    assert raw_client.post("/auth/refresh").status_code == 401
+
+    # Refresh token válido apontando para usuário removido
+    raw_client.post("/auth/login", json={"login": "cliente", "senha": "cliente123"})
+    with db_session_factory() as db:
+        from services.auth_service import AuthService
+
+        svc = AuthService(db)
+        rt = (
+            db.query(RefreshToken)
+            .filter_by(revoked=False)
+            .order_by(RefreshToken.id_token.desc())
+            .first()
+        )
+        monkeypatch.setattr(svc.repo, "buscar_refresh_por_hash", lambda _h: rt)
+        monkeypatch.setattr(svc.repo, "buscar_por_id", lambda _id: None)
+        with pytest.raises(Exception) as exc2:
+            svc.rotacionar_refresh("qualquer-valor")
+        assert exc2.value.status_code == 401

@@ -57,8 +57,9 @@ describe('format.js e api.js', () => {
     expect(formatDateTime('2026-11-15T17:30:00Z')).toMatch(/\d{2}\/\d{2}\/\d{4}/)
   })
 
-  it('cliente Axios configura baseURL e header JSON', () => {
-    expect(api.defaults.baseURL).toBe('http://127.0.0.1:8000')
+  it('cliente Axios configura baseURL, withCredentials e header JSON', () => {
+    expect(api.defaults.baseURL).toBe('http://localhost:8000')
+    expect(api.defaults.withCredentials).toBe(true)
     expect(api.defaults.headers['Content-Type']).toBe('application/json')
   })
 })

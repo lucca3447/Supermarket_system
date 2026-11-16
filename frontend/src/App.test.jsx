@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { api } from './services/api'
@@ -10,7 +11,22 @@ vi.mock('./services/api', () => ({
     put: vi.fn(),
     delete: vi.fn(),
   },
+  setOnUnauthorized: vi.fn(),
 }))
+
+const USUARIO_GERENTE = {
+  id_usuario: 1,
+  nome: 'Gerente do Mercado',
+  login: 'gerente',
+  perfil: 'gerente',
+}
+
+const USUARIO_CLIENTE = {
+  id_usuario: 2,
+  nome: 'Cliente Padrão',
+  login: 'cliente',
+  perfil: 'cliente',
+}
 
 const PRODUTOS_BASE = [
   {
@@ -78,24 +94,110 @@ const VENDAS_BASE = [
   },
 ]
 
-function mockDadosIniciais(produtos = PRODUTOS_BASE, vendas = VENDAS_BASE) {
+function renderApp(rotaInicial = '/caixa') {
+  return render(
+    <MemoryRouter initialEntries={[rotaInicial]}>
+      <App />
+    </MemoryRouter>,
+  )
+}
+
+function mockDadosIniciais(
+  produtos = PRODUTOS_BASE,
+  vendas = VENDAS_BASE,
+  usuario = USUARIO_GERENTE,
+) {
   api.get.mockImplementation((url) => {
+    if (url === '/auth/me') return Promise.resolve({ data: usuario })
     if (url === '/produtos/') return Promise.resolve({ data: produtos })
     if (url === '/vendas/') return Promise.resolve({ data: vendas })
     return Promise.reject(new Error(`Rota não mockada: ${url}`))
   })
 }
 
-describe('Mercadinho Bom Preço — Fluxos completos', () => {
+describe('Mercadinho Bom Preço — Fluxos completos com Auth e RBAC', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
+  })
+
+  it('autentica na tela /login (Demo Gerente, erro e registro de Cliente), aplica RBAC e faz logout', async () => {
+    api.get.mockImplementation((url) => {
+      if (url === '/auth/me') return Promise.reject({ response: { status: 401 } })
+      if (url === '/produtos/') return Promise.resolve({ data: PRODUTOS_BASE })
+      if (url === '/vendas/') return Promise.resolve({ data: VENDAS_BASE })
+      return Promise.reject(new Error(`Rota não mockada: ${url}`))
+    })
+
+    renderApp('/estoque')
+    expect(await screen.findByText('Entrar no sistema')).toBeInTheDocument()
+
+    // Erro de credenciais no login
+    api.post.mockRejectedValueOnce({ response: { data: { detail: 'Usuário ou senha incorretos.' } } })
+    fireEvent.click(screen.getByRole('button', { name: /Demo Gerente/i }))
+    expect(screen.getByLabelText('Usuário')).toHaveValue('gerente')
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar no sistema' }))
+    expect(await screen.findByText('Usuário ou senha incorretos.')).toBeInTheDocument()
+
+    // Cadastro de novo Cliente pela aba Criar conta
+    fireEvent.click(screen.getByRole('button', { name: /Criar conta \(Cliente\)/i }))
+    fireEvent.change(screen.getByLabelText('Nome completo'), { target: { value: 'Maria Silva' } })
+    fireEvent.change(screen.getByLabelText('Usuário'), { target: { value: 'maria' } })
+    fireEvent.change(screen.getByLabelText('Senha'), { target: { value: 'maria123' } })
+    api.post.mockResolvedValueOnce({
+      data: {
+        access_token: 'tok',
+        usuario: { id_usuario: 9, nome: 'Maria Silva', login: 'maria', perfil: 'cliente' },
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar e entrar' }))
+
+    expect(await screen.findByText('Maria Silva')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Produtos e Estoque/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Histórico de Vendas/i })).not.toBeInTheDocument()
+    expect(api.get).not.toHaveBeenCalledWith('/vendas/')
+
+    // Logout limpa sessão e volta para /login
+    api.post.mockResolvedValueOnce({ data: { mensagem: 'ok' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sair' }))
+    expect(await screen.findByText('Entrar no sistema')).toBeInTheDocument()
+
+    // Preenche Demo Cliente e autentica
+    fireEvent.click(screen.getByRole('button', { name: /Demo Cliente/i }))
+    expect(screen.getByLabelText('Usuário')).toHaveValue('cliente')
+  })
+
+  it('redireciona cliente que tenta acessar /estoque ou /historico diretamente na URL', async () => {
+    mockDadosIniciais(PRODUTOS_BASE, VENDAS_BASE, USUARIO_CLIENTE)
+    const { unmount } = renderApp('/estoque')
+    expect(await screen.findByText('Gôndola de Produtos')).toBeInTheDocument()
+    unmount()
+
+    renderApp('/historico')
+    expect(await screen.findByText('Gôndola de Produtos')).toBeInTheDocument()
+  })
+
+  it('mantém itens do carrinho após F5 via localStorage e sincroniza com estoque', async () => {
+    localStorage.setItem(
+      'carrinho_tde',
+      JSON.stringify([{ ...PRODUTOS_BASE[0], quantidade: 5 }]),
+    )
+    mockDadosIniciais(PRODUTOS_BASE, VENDAS_BASE, USUARIO_GERENTE)
+
+    renderApp('/caixa')
+    await screen.findByText('Picanha Bovina')
+
+    // Quantidade 5 salva no localStorage foi ajustada para o estoque real (3)
+    expect(screen.getByRole('button', { name: /Max \(3\)/i })).toBeDisabled()
   })
 
   it('exibe erro ao falhar carregamento inicial e recupera ao tentar novamente', async () => {
-    api.get.mockRejectedValueOnce({ response: { data: { detail: 'Servidor fora do ar.' } } })
-    render(<App />)
+    api.get.mockImplementation((url) => {
+      if (url === '/auth/me') return Promise.resolve({ data: USUARIO_GERENTE })
+      return Promise.reject({ response: { data: { detail: 'Servidor fora do ar.' } } })
+    })
+    renderApp('/caixa')
 
-    expect(screen.getByText(/Carregando catálogo/i)).toBeInTheDocument()
     expect(await screen.findByText('Servidor fora do ar.')).toBeInTheDocument()
 
     mockDadosIniciais()
@@ -110,6 +212,7 @@ describe('Mercadinho Bom Preço — Fluxos completos', () => {
     let vendasAtuais = []
 
     api.get.mockImplementation((url) => {
+      if (url === '/auth/me') return Promise.resolve({ data: USUARIO_GERENTE })
       if (url === '/produtos/') return Promise.resolve({ data: produtosAtuais })
       if (url === '/vendas/') return Promise.resolve({ data: vendasAtuais })
       return Promise.reject(new Error(`Rota desconhecida: ${url}`))
@@ -145,7 +248,7 @@ describe('Mercadinho Bom Preço — Fluxos completos', () => {
       return Promise.reject(new Error('Erro'))
     })
 
-    render(<App />)
+    renderApp('/caixa')
     await screen.findByText('Picanha Bovina')
 
     // Filtra por categoria e busca sem resultado
@@ -222,12 +325,13 @@ describe('Mercadinho Bom Preço — Fluxos completos', () => {
   it('gerencia CRUD completo de produtos, ajustes rapidos de estoque e sincronizacao da cesta', async () => {
     let produtosAtuais = PRODUTOS_BASE.map((p) => ({ ...p }))
     api.get.mockImplementation((url) => {
+      if (url === '/auth/me') return Promise.resolve({ data: USUARIO_GERENTE })
       if (url === '/produtos/') return Promise.resolve({ data: produtosAtuais })
       if (url === '/vendas/') return Promise.resolve({ data: VENDAS_BASE })
       return Promise.reject(new Error('Erro'))
     })
 
-    render(<App />)
+    renderApp('/caixa')
     await screen.findByText('Picanha Bovina')
 
     // Coloca 3 unidades de Picanha na cesta para testar clamp/remoção quando estoque mudar
@@ -236,8 +340,8 @@ describe('Mercadinho Bom Preço — Fluxos completos', () => {
     fireEvent.click(within(cardPicanha).getByRole('button', { name: /Mais 1/i }))
     fireEvent.click(within(cardPicanha).getByRole('button', { name: /Mais 1/i }))
 
-    // Navega para aba Produtos e Estoque
-    fireEvent.click(screen.getByRole('button', { name: /Produtos e Estoque/i }))
+    // Navega para rota /estoque
+    fireEvent.click(screen.getByRole('link', { name: /Produtos e Estoque/i }))
     expect(screen.getByText('Catálogo e Controle de Estoque')).toBeInTheDocument()
 
     // Validações de formulário (nome curto, preço inválido, estoque inválido)
@@ -342,18 +446,15 @@ describe('Mercadinho Bom Preço — Fluxos completos', () => {
 
   it('exibe historico de vendas com e sem desconto e estado vazio', async () => {
     mockDadosIniciais(PRODUTOS_BASE, [])
-    const { unmount } = render(<App />)
-    await screen.findByText('Picanha Bovina')
-
-    fireEvent.click(screen.getByRole('button', { name: /Histórico de Vendas/i }))
-    expect(screen.getByText('Nenhuma venda registrada ainda.')).toBeInTheDocument()
+    const { unmount } = renderApp('/historico')
+    expect(await screen.findByText('Nenhuma venda registrada ainda.')).toBeInTheDocument()
     unmount()
 
     mockDadosIniciais(PRODUTOS_BASE, VENDAS_BASE)
-    render(<App />)
+    renderApp('/caixa')
     await screen.findByText('Picanha Bovina')
 
-    fireEvent.click(screen.getByRole('button', { name: /Histórico de Vendas/i }))
+    fireEvent.click(screen.getByRole('link', { name: /Histórico de Vendas/i }))
     expect(screen.getByText('Venda #001')).toBeInTheDocument()
     expect(screen.getByText(/5% OFF Aplicado/i)).toBeInTheDocument()
     expect(screen.getByText('Venda #002')).toBeInTheDocument()
@@ -364,13 +465,14 @@ describe('Mercadinho Bom Preço — Fluxos completos', () => {
     let produtosAtuais = PRODUTOS_BASE.map((p) => ({ ...p }))
 
     api.get.mockImplementation((url) => {
+      if (url === '/auth/me') return Promise.resolve({ data: USUARIO_GERENTE })
       if (url === '/produtos/') return Promise.resolve({ data: produtosAtuais })
       if (url === '/vendas/') return Promise.resolve({ data: VENDAS_BASE })
       if (url === '/insights/estoque') {
         return Promise.resolve({
           data: {
             origem: 'gemini',
-            modelo: 'gemini-2.5-flash',
+            modelo: 'gemini-3.1-flash-lite',
             resumo_executivo: 'Repor café esgotado imediatamente.',
             recomendacoes: ['Repor Café Esgotado.', 'Destacar Picanha Bovina.'],
             alertas: [
@@ -415,11 +517,8 @@ describe('Mercadinho Bom Preço — Fluxos completos', () => {
       return Promise.resolve({ data: { id_produto: id, ...payload } })
     })
 
-    render(<App />)
-    await screen.findByText('Picanha Bovina')
-
-    fireEvent.click(screen.getByRole('button', { name: /Produtos e Estoque/i }))
-    expect(screen.getByText('Consultor de Estoque (IA)')).toBeInTheDocument()
+    renderApp('/estoque')
+    expect(await screen.findByText('Consultor de Estoque (IA)')).toBeInTheDocument()
 
     // 1. Consulta com retorno Gemini AI e reposição rápida
     fireEvent.click(screen.getByRole('button', { name: /Gerar Insights/i }))
@@ -437,6 +536,7 @@ describe('Mercadinho Bom Preço — Fluxos completos', () => {
 
     // 2. Consulta com fallback local e sem alertas
     api.get.mockImplementation((url) => {
+      if (url === '/auth/me') return Promise.resolve({ data: USUARIO_GERENTE })
       if (url === '/produtos/') return Promise.resolve({ data: produtosAtuais })
       if (url === '/vendas/') return Promise.resolve({ data: VENDAS_BASE })
       if (url === '/insights/estoque') {

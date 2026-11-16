@@ -4,8 +4,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings
 from core.database import ACTIVE_DATABASE_BACKEND, Base, SessionLocal, engine
+from core.security import gerar_hash_senha
 from models.produto_model import Produto
+from models.usuario_model import RefreshToken, Usuario  # noqa: F401 - garante registro das tabelas no metadata
 from models.venda_model import ItemVenda, Venda  # noqa: F401 - garante registro das tabelas no metadata
+from routers.auth_router import router as auth_router
 from routers.insight_router import router as insight_router
 from routers.produto_router import router as produto_router
 from routers.venda_router import router as venda_router
@@ -32,8 +35,32 @@ def seed_produtos_iniciais():
             db.commit()
 
 
+def seed_usuarios_iniciais():
+    """Garante os perfis padrão de demonstração (gerente e cliente) se não houver usuários."""
+    with SessionLocal() as db:
+        if db.query(Usuario).count() == 0:
+            db.add_all(
+                [
+                    Usuario(
+                        nome="Gerente do Mercado",
+                        login="gerente",
+                        senha_hash=gerar_hash_senha("gerente123"),
+                        perfil="gerente",
+                    ),
+                    Usuario(
+                        nome="Cliente Padrão",
+                        login="cliente",
+                        senha_hash=gerar_hash_senha("cliente123"),
+                        perfil="cliente",
+                    ),
+                ]
+            )
+            db.commit()
+
+
 Base.metadata.create_all(bind=engine)
 seed_produtos_iniciais()
+seed_usuarios_iniciais()
 
 app = FastAPI(
     title="Sistema de Supermercado — TDE Back-End",
@@ -55,6 +82,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(produto_router)
 app.include_router(venda_router)
 app.include_router(insight_router)
