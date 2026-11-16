@@ -809,3 +809,147 @@ def test_auth_tokens_invalidos_expirados_e_usuario_removido(raw_client, db_sessi
         with pytest.raises(Exception) as exc2:
             svc.rotacionar_refresh("qualquer-valor")
         assert exc2.value.status_code == 401
+
+
+def test_venda_baixa_atomica_concorrente_e_rollback(client, monkeypatch):
+    p1 = _criar_produto(client, nome="Produto A", preco="20.00", estoque=5).json()
+    p2 = _criar_produto(client, nome="Produto B", preco="30.00", estoque=1).json()
+
+    from repositories.produto_repository import ProdutoRepository
+
+    original_baixar = ProdutoRepository.baixar_estoque_atomico
+
+    def simular_concorrencia(self, id_produto, quantidade):
+        if id_produto == p2["id_produto"]:
+            return False
+        return original_baixar(self, id_produto, quantidade)
+
+    monkeypatch.setattr(ProdutoRepository, "baixar_estoque_atomico", simular_concorrencia)
+
+    res = client.post(
+        "/vendas/",
+        json={
+            "itens": [
+                {"id_produto": p2["id_produto"], "quantidade": 1},
+                {"id_produto": p1["id_produto"], "quantidade": 2},
+            ]
+        },
+    )
+    assert res.status_code == 400
+    # Rollback garante que Produto A voltou para 5 unidades
+    assert client.get(f"/produtos/{p1['id_produto']}").json()["quantidade_estoque"] == 5
+
+
+def test_patch_ajuste_estoque_relativo_e_trava_zero(raw_client, db_session_factory, monkeypatch):
+    monkeypatch.setattr(main_module, "SessionLocal", db_session_factory)
+    seed_usuarios_iniciais()
+
+    raw_client.post("/auth/login", json={"login": "gerente", "senha": "gerente123"})
+    p = _criar_produto(raw_client, nome="Café", preco="25.00", estoque=5).json()
+
+    res_mais = raw_client.patch(f"/produtos/{p['id_produto']}/estoque", json={"delta": 10})
+    assert res_mais.status_code == 200
+    assert res_mais.json()["quantidade_estoque"] == 15
+
+    res_trava = raw_client.patch(f"/produtos/{p['id_produto']}/estoque", json={"delta": -50})
+    assert res_trava.status_code == 200
+    assert res_trava.json()["quantidade_estoque"] == 0
+
+    assert raw_client.patch("/produtos/9999/estoque", json={"delta": 1}).status_code == 404
+
+    # Cliente não pode ajustar estoque
+    raw_client.post("/auth/login", json={"login": "cliente", "senha": "cliente123"})
+    assert raw_client.patch(f"/produtos/{p['id_produto']}/estoque", json={"delta": 1}).status_code == 403
+
+
+def test_validacoes_secret_key_senha_72_bytes_e_produto_limites(client):
+    from core.config import Settings
+
+    with pytest.raises(ValueError, match="SECRET_KEY"):
+        Settings(SECRET_KEY="tde-supermercado-dev-secret")
+    with pytest.raises(ValueError, match="SECRET_KEY"):
+        Settings(SECRET_KEY="curta")
+
+    # Senhas > 72 bytes UTF-8 retornam 422 em vez de 500 no bcrypt
+    assert client.post("/auth/login", json={"login": "gerente", "senha": "a" * 73}).status_code == 422
+    assert (
+        client.post(
+            "/auth/registrar",
+            json={"nome": "Teste", "login": "teste72", "senha": "é" * 40},
+        ).status_code
+        == 422
+    )
+
+    # Preço Infinity, > 2 casas decimais e estoque acima de INT32 retornam 422
+    assert _criar_produto(client, nome="Inf", preco="Infinity", estoque=1).status_code == 422
+    assert _criar_produto(client, nome="Tres Decimais", preco="10.005", estoque=1).status_code == 422
+    assert _criar_produto(client, nome="Estoque Gigante", preco="10.00", estoque=2_147_483_648).status_code == 422
+
+
+def test_auth_registro_integrity_error_e_refresh_concorrente(db_session_factory, monkeypatch):
+    from sqlalchemy.exc import IntegrityError
+    from schemas.auth_schema import RegistroRequest
+    from services.auth_service import AuthService
+
+    monkeypatch.setattr(main_module, "SessionLocal", db_session_factory)
+    seed_usuarios_iniciais()
+
+    with db_session_factory() as db:
+        svc = AuthService(db)
+        monkeypatch.setattr(svc.repo, "buscar_por_login", lambda _login: None)
+
+        def fake_criar(_usuario):
+            raise IntegrityError("INSERT", {}, Exception("duplicate"))
+
+        monkeypatch.setattr(svc.repo, "criar", fake_criar)
+        with pytest.raises(Exception) as exc:
+            svc.registrar_cliente(RegistroRequest(nome="Novo", login="gerente", senha="abcd"))
+        assert exc.value.status_code == 409
+
+    with db_session_factory() as db:
+        svc = AuthService(db)
+        _, raw_refresh, _ = svc._emitir_par_tokens(db.query(Usuario).first())
+        monkeypatch.setattr(svc.repo, "revogar_refresh_se_ativo", lambda _id: False)
+        with pytest.raises(Exception) as exc_refresh:
+            svc.rotacionar_refresh(raw_refresh)
+        assert exc_refresh.value.status_code == 401
+
+
+def test_insights_janela_30_dias_utc_e_paginacao_vendas(client, db_session_factory, monkeypatch):
+    monkeypatch.setattr(insight_module.settings, "GEMINI_API_KEY", "")
+    p = _criar_produto(client, nome="Leite 1L", preco="10.00", estoque=10).json()
+
+    # Insere venda antiga (35 dias atrás) que não deve inflar demanda recente
+    from models.venda_model import ItemVenda
+
+    with db_session_factory() as db:
+        venda_antiga = Venda(
+            data_hora=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=35),
+            valor_bruto=500,
+            desconto_aplicado=25,
+            valor_final=475,
+            teve_desconto=True,
+            itens=[
+                ItemVenda(
+                    id_produto=p["id_produto"],
+                    nome_produto="Leite 1L",
+                    preco_unitario=10,
+                    quantidade=50,
+                    subtotal=500,
+                )
+            ],
+        )
+        db.add(venda_antiga)
+        db.commit()
+
+    # Cria 2 vendas recentes para testar paginação e sufixo UTC
+    client.post("/vendas/", json={"itens": [{"id_produto": p["id_produto"], "quantidade": 1}]})
+    client.post("/vendas/", json={"itens": [{"id_produto": p["id_produto"], "quantidade": 1}]})
+
+    insights = client.get("/insights/estoque").json()
+    assert insights["alertas"] == []
+    assert insights["metricas"]["total_vendas"] == 3
+
+    paginado = client.get("/vendas/?limit=1&offset=1").json()
+    assert len(paginado) == 1
+    assert paginado[0]["data_hora"].endswith("Z")

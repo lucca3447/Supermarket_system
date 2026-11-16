@@ -186,7 +186,7 @@ describe('Mercadinho Bom Preço — Fluxos completos com Auth e RBAC', () => {
     mockDadosIniciais(PRODUTOS_BASE, VENDAS_BASE, USUARIO_GERENTE)
 
     renderApp('/caixa')
-    await screen.findByText('Picanha Bovina')
+    await screen.findByRole('heading', { name: 'Picanha Bovina' })
 
     // Quantidade 5 salva no localStorage foi ajustada para o estoque real (3)
     expect(screen.getByRole('button', { name: /Max \(3\)/i })).toBeDisabled()
@@ -542,6 +542,11 @@ describe('Mercadinho Bom Preço — Fluxos completos com Auth e RBAC', () => {
         { delta: 15 },
       ),
     )
+    // Card de insights permanece montado após reposição e não refaz GET /vendas/
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/produtos/'))
+    expect(screen.getByText('Repor café esgotado imediatamente.')).toBeInTheDocument()
+    const chamadasVendas = api.get.mock.calls.filter(([url]) => url === '/vendas/')
+    expect(chamadasVendas).toHaveLength(1)
 
     // 2. Consulta com fallback local e sem alertas
     api.get.mockImplementation((url) => {
