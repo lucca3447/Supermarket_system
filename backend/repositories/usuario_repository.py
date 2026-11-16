@@ -1,4 +1,6 @@
-from sqlalchemy import update
+from datetime import datetime
+
+from sqlalchemy import delete, or_, update
 from sqlalchemy.orm import Session
 
 from models.usuario_model import RefreshToken, Usuario
@@ -61,3 +63,18 @@ class UsuarioRepository:
             .execution_options(synchronize_session="evaluate")
         )
         return self.db.execute(stmt).rowcount == 1
+
+    def limpar_refresh_tokens_inativos(
+        self, id_usuario: int, agora: datetime, ignorar_id: int | None = None
+    ) -> None:
+        condicao_inativo = or_(
+            RefreshToken.revoked.is_(True),
+            RefreshToken.expires_at <= agora,
+        )
+        stmt = delete(RefreshToken).where(
+            RefreshToken.id_usuario == id_usuario,
+            condicao_inativo,
+        )
+        if ignorar_id is not None:
+            stmt = stmt.where(RefreshToken.id_token != ignorar_id)
+        self.db.execute(stmt)

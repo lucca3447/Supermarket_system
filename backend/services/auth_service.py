@@ -78,7 +78,7 @@ class AuthService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Sessão expirada. Faça login novamente.",
             )
-        return self._emitir_par_tokens(usuario)
+        return self._emitir_par_tokens(usuario, ignorar_id=registro.id_token)
 
     def revogar_refresh(self, refresh_token_bruto: str | None) -> None:
         if not refresh_token_bruto:
@@ -87,10 +87,16 @@ class AuthService:
         if registro and not registro.revoked:
             self.repo.revogar_refresh_token(registro)
 
-    def _emitir_par_tokens(self, usuario: Usuario) -> tuple[str, str, Usuario]:
+    def _emitir_par_tokens(
+        self, usuario: Usuario, ignorar_id: int | None = None
+    ) -> tuple[str, str, Usuario]:
+        agora = _utcnow_naive()
+        self.repo.limpar_refresh_tokens_inativos(
+            usuario.id_usuario, agora, ignorar_id=ignorar_id
+        )
         access_token = criar_access_token(usuario.id_usuario, usuario.perfil)
         refresh_bruto, refresh_hash = gerar_refresh_token()
-        expires_at = _utcnow_naive() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        expires_at = agora + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
         self.repo.salvar_refresh_token(
             RefreshToken(
