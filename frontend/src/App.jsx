@@ -337,7 +337,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="font-display text-xl font-bold tracking-tight">
-                Mercadinho Bom Preço
+                Mercado do Lucca
               </h1>
               <p className="text-xs text-emerald-100/90">
                 Sistema de Caixa, Controle de Estoque e Desconto Automático (5% &gt; R$ 200)

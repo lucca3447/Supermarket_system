@@ -52,7 +52,7 @@ export function LoginView({ onAutenticado }) {
           </div>
           <div>
             <h1 className="font-display text-xl font-bold text-stone-900">
-              Mercadinho Bom Preço
+              Mercado do Lucca
             </h1>
             <p className="text-xs text-stone-500">
               Acesse com seu perfil de Cliente ou Gerente

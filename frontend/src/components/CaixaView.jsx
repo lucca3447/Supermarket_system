@@ -246,7 +246,7 @@ export function CaixaView({
                 </span>
               </div>
               <p className="mt-0.5 text-xs text-stone-500">
-                Mercadinho Bom Preço · Caixa 01
+                Mercado do Lucca · Caixa 01
               </p>
             </div>
 

@@ -116,7 +116,7 @@ function mockDadosIniciais(
   })
 }
 
-describe('Mercadinho Bom Preço — Fluxos completos com Auth e RBAC', () => {
+describe('Mercado do Lucca — Fluxos completos com Auth e RBAC', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
