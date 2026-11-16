@@ -227,17 +227,10 @@ export default function App() {
   }
 
   async function ajustarEstoqueRapido(produto, delta) {
-    const novoEstoque = Math.max(0, produto.quantidade_estoque + delta)
     setSalvando(true)
     setErro('')
     try {
-      await api.put(`/produtos/${produto.id_produto}`, {
-        nome: produto.nome,
-        categoria: produto.categoria,
-        unidade: produto.unidade,
-        preco: produto.preco,
-        quantidade_estoque: novoEstoque,
-      })
+      await api.patch(`/produtos/${produto.id_produto}/estoque`, { delta })
       await carregarDados()
     } catch (requestError) {
       setErro(

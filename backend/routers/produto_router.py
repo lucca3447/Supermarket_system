@@ -4,7 +4,12 @@ from sqlalchemy.orm import Session
 from core.auth_dependencies import get_current_user, require_gerente
 from core.database import get_db
 from models.usuario_model import Usuario
-from schemas.produto_schema import ProdutoCreate, ProdutoResponse, ProdutoUpdate
+from schemas.produto_schema import (
+    EstoqueAjusteRequest,
+    ProdutoCreate,
+    ProdutoResponse,
+    ProdutoUpdate,
+)
 from services.produto_service import ProdutoService
 
 router = APIRouter(prefix="/produtos", tags=["Produtos"])
@@ -48,6 +53,17 @@ def atualizar_produto(
 ):
     service = ProdutoService(db)
     return service.atualizar(id_produto, payload)
+
+
+@router.patch("/{id_produto}/estoque", response_model=ProdutoResponse)
+def ajustar_estoque_produto(
+    id_produto: int,
+    payload: EstoqueAjusteRequest,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(require_gerente),
+):
+    service = ProdutoService(db)
+    return service.ajustar_estoque(id_produto, payload.delta)
 
 
 @router.delete("/{id_produto}")

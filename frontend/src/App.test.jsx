@@ -9,6 +9,7 @@ vi.mock('./services/api', () => ({
     get: vi.fn(),
     post: vi.fn(),
     put: vi.fn(),
+    patch: vi.fn(),
     delete: vi.fn(),
   },
   setOnUnauthorized: vi.fn(),
@@ -380,16 +381,21 @@ describe('Mercadinho Bom Preço — Fluxos completos com Auth e RBAC', () => {
     expect(await screen.findByText('Leite Integral')).toBeInTheDocument()
 
     // Ajuste rápido de estoque (-1 reduz Picanha de 3 para 2 e sincroniza cesta!)
-    api.put.mockImplementation((url, payload) => {
-      const id = Number(url.split('/').pop())
-      produtosAtuais = produtosAtuais.map((p) => (p.id_produto === id ? { ...p, ...payload } : p))
-      return Promise.resolve({ data: { id_produto: id, ...payload } })
+    api.patch.mockImplementation((url, payload) => {
+      const id = Number(url.split('/').slice(-2, -1)[0])
+      let atualizado = null
+      produtosAtuais = produtosAtuais.map((p) => {
+        if (p.id_produto !== id) return p
+        atualizado = { ...p, quantidade_estoque: Math.max(0, p.quantidade_estoque + payload.delta) }
+        return atualizado
+      })
+      return Promise.resolve({ data: atualizado })
     })
     fireEvent.click(screen.getByLabelText('Reduzir estoque de Picanha Bovina'))
-    await waitFor(() => expect(api.put).toHaveBeenCalled())
+    await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/produtos/1/estoque', { delta: -1 }))
 
     // Erro em ajuste rápido
-    api.put.mockRejectedValueOnce(new Error('Falha de rede'))
+    api.patch.mockRejectedValueOnce(new Error('Falha de rede'))
     fireEvent.click(screen.getByLabelText('Aumentar estoque de Picanha Bovina'))
     expect(await screen.findByText('Erro ao atualizar estoque.')).toBeInTheDocument()
 
@@ -509,12 +515,15 @@ describe('Mercadinho Bom Preço — Fluxos completos com Auth e RBAC', () => {
       return Promise.reject(new Error(`Rota não mockada: ${url}`))
     })
 
-    api.put.mockImplementation((url, payload) => {
-      const id = Number(url.split('/').pop())
-      produtosAtuais = produtosAtuais.map((p) =>
-        p.id_produto === id ? { ...p, ...payload } : p,
-      )
-      return Promise.resolve({ data: { id_produto: id, ...payload } })
+    api.patch.mockImplementation((url, payload) => {
+      const id = Number(url.split('/').slice(-2, -1)[0])
+      let atualizado = null
+      produtosAtuais = produtosAtuais.map((p) => {
+        if (p.id_produto !== id) return p
+        atualizado = { ...p, quantidade_estoque: Math.max(0, p.quantidade_estoque + payload.delta) }
+        return atualizado
+      })
+      return Promise.resolve({ data: atualizado })
     })
 
     renderApp('/estoque')
@@ -528,9 +537,9 @@ describe('Mercadinho Bom Preço — Fluxos completos com Auth e RBAC', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Repor +15' }))
     await waitFor(() =>
-      expect(api.put).toHaveBeenCalledWith(
-        '/produtos/3',
-        expect.objectContaining({ quantidade_estoque: 15 }),
+      expect(api.patch).toHaveBeenCalledWith(
+        '/produtos/3/estoque',
+        { delta: 15 },
       ),
     )
 

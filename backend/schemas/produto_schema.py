@@ -20,6 +20,10 @@ class ProdutoUpdate(ProdutoBase):
     pass
 
 
+class EstoqueAjusteRequest(BaseModel):
+    delta: int = Field(..., ge=-2_147_483_647, le=2_147_483_647)
+
+
 class ProdutoResponse(BaseModel):
     id_produto: int
     nome: str

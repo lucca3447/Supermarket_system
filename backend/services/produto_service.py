@@ -33,3 +33,12 @@ class ProdutoService:
         produto = self.buscar_por_id(id_produto)
         self.repository.deletar(produto)
         return {"mensagem": "Produto removido com sucesso.", "id_produto": id_produto}
+
+    def ajustar_estoque(self, id_produto: int, delta: int) -> Produto:
+        produto = self.repository.ajustar_estoque_atomico(id_produto, delta)
+        if not produto:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Produto não encontrado.",
+            )
+        return produto

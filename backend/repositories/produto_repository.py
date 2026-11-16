@@ -1,4 +1,4 @@
-from sqlalchemy import update
+from sqlalchemy import case, update
 from sqlalchemy.orm import Session
 
 from models.produto_model import Produto
@@ -65,3 +65,21 @@ class ProdutoRepository:
         )
         resultado = self.db.execute(stmt)
         return resultado.rowcount == 1
+
+    def ajustar_estoque_atomico(self, id_produto: int, delta: int) -> Produto | None:
+        novo_estoque = case(
+            (Produto.quantidade_estoque + delta < 0, 0),
+            else_=Produto.quantidade_estoque + delta,
+        )
+        stmt = (
+            update(Produto)
+            .where(Produto.id_produto == id_produto)
+            .values(quantidade_estoque=novo_estoque)
+            .execution_options(synchronize_session="evaluate")
+        )
+        resultado = self.db.execute(stmt)
+        if resultado.rowcount == 0:
+            self.db.rollback()
+            return None
+        self.db.commit()
+        return self.buscar_por_id(id_produto)
