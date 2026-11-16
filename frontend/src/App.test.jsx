@@ -211,6 +211,11 @@ describe('Mercadinho Bom Preço — Fluxos completos com Auth e RBAC', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Atualizar dados' }))
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/produtos/'))
     expect(screen.getByText('Picanha Bovina')).toBeInTheDocument()
+
+    // Foco na janela dispara sincronização silenciosa em segundo plano
+    const chamadasAntes = api.get.mock.calls.length
+    fireEvent(window, new Event('focus'))
+    await waitFor(() => expect(api.get.mock.calls.length).toBeGreaterThan(chamadasAntes))
   })
 
   it('filtra gôndola, manipula cesta, aplica 5% OFF e finaliza compra', async () => {

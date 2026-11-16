@@ -104,10 +104,12 @@ export default function App() {
   }, [])
 
   const carregarDados = useCallback(
-    async ({ incluirVendas = true } = {}) => {
+    async ({ incluirVendas = true, silencioso = false } = {}) => {
       if (!usuario) return
-      setErro('')
-      setCarregando(true)
+      if (!silencioso) {
+        setErro('')
+        setCarregando(true)
+      }
       try {
         const ehGerente = usuario.perfil === 'gerente'
         const buscarVendas = ehGerente && incluirVendas
@@ -138,20 +140,39 @@ export default function App() {
             .filter(Boolean),
         )
       } catch (requestError) {
-        setErro(
-          requestError.response?.data?.detail ||
-            'Não foi possível conectar ao servidor da API.',
-        )
+        if (!silencioso) {
+          setErro(
+            requestError.response?.data?.detail ||
+              'Não foi possível conectar ao servidor da API.',
+          )
+        }
       } finally {
-        setCarregando(false)
+        if (!silencioso) {
+          setCarregando(false)
+        }
       }
     },
     [usuario],
   )
 
   useEffect(() => {
-    if (usuario) {
-      carregarDados()
+    if (!usuario) return
+    carregarDados()
+
+    const sincronizarSeVisivel = () => {
+      if (!document.hidden) {
+        carregarDados({ silencioso: true })
+      }
+    }
+
+    const intervalo = setInterval(sincronizarSeVisivel, 5000)
+    window.addEventListener('focus', sincronizarSeVisivel)
+    document.addEventListener('visibilitychange', sincronizarSeVisivel)
+
+    return () => {
+      clearInterval(intervalo)
+      window.removeEventListener('focus', sincronizarSeVisivel)
+      document.removeEventListener('visibilitychange', sincronizarSeVisivel)
     }
   }, [usuario, carregarDados])
 
