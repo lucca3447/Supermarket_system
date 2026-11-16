@@ -1,4 +1,5 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, func
+from datetime import datetime, timezone
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import relationship
 from core.database import Base
 
@@ -7,7 +8,11 @@ class Venda(Base):
     __tablename__ = "vendas"
 
     id_venda = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    data_hora = Column(DateTime, server_default=func.now(), nullable=False)
+    data_hora = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        nullable=False,
+    )
     valor_bruto = Column(Numeric(10, 2), nullable=False)
     desconto_aplicado = Column(Numeric(10, 2), nullable=False, default=0)
     valor_final = Column(Numeric(10, 2), nullable=False)

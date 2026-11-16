@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
 class ItemCompraCreate(BaseModel):
@@ -34,3 +34,12 @@ class VendaResponse(BaseModel):
     itens: list[ItemVendaResponse]
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("data_hora")
+    def serializar_data_hora_utc(self, valor: datetime) -> str:
+        aware = (
+            valor.replace(tzinfo=timezone.utc)
+            if valor.tzinfo is None
+            else valor.astimezone(timezone.utc)
+        )
+        return aware.isoformat().replace("+00:00", "Z")
