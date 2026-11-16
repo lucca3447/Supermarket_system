@@ -16,6 +16,7 @@ router = APIRouter(prefix="/produtos", tags=["Produtos"])
 
 
 @router.get("/", response_model=list[ProdutoResponse])
+@router.get("", response_model=list[ProdutoResponse], include_in_schema=False)
 def listar_produtos(
     db: Session = Depends(get_db),
     _: Usuario = Depends(get_current_user),
@@ -35,6 +36,12 @@ def buscar_produto(
 
 
 @router.post("/", response_model=ProdutoResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=ProdutoResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
 def criar_produto(
     payload: ProdutoCreate,
     db: Session = Depends(get_db),

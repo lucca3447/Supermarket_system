@@ -125,10 +125,12 @@ def test_crud_produtos_completo_e_erros_404(client):
     assert produto["quantidade_estoque"] == 25
     id_produto = produto["id_produto"]
 
-    # List & Get by ID
+    # List & Get by ID (com e sem barra final, sem redirect 307)
     list_res = client.get("/produtos/")
     assert list_res.status_code == 200
     assert len(list_res.json()) == 1
+    assert client.get("/produtos", follow_redirects=False).status_code == 200
+    assert client.get("/vendas", follow_redirects=False).status_code == 200
 
     get_res = client.get(f"/produtos/{id_produto}")
     assert get_res.status_code == 200

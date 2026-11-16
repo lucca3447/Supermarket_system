@@ -140,7 +140,7 @@ export default function App() {
       } catch (requestError) {
         setErro(
           requestError.response?.data?.detail ||
-            'Não foi possível conectar ao back-end FastAPI em http://localhost:8000.',
+            'Não foi possível conectar ao servidor da API.',
         )
       } finally {
         setCarregando(false)

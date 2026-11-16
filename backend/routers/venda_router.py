@@ -11,6 +11,7 @@ router = APIRouter(prefix="/vendas", tags=["Vendas"])
 
 
 @router.get("/", response_model=list[VendaResponse])
+@router.get("", response_model=list[VendaResponse], include_in_schema=False)
 def listar_vendas(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -22,6 +23,12 @@ def listar_vendas(
 
 
 @router.post("/", response_model=VendaResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=VendaResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
 def registrar_venda(
     payload: VendaCreate,
     db: Session = Depends(get_db),
