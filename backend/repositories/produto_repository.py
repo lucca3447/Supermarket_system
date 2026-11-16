@@ -1,3 +1,4 @@
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from models.produto_model import Produto
@@ -51,3 +52,16 @@ class ProdutoRepository:
     def deletar(self, produto: Produto) -> None:
         self.db.delete(produto)
         self.db.commit()
+
+    def baixar_estoque_atomico(self, id_produto: int, quantidade: int) -> bool:
+        stmt = (
+            update(Produto)
+            .where(
+                Produto.id_produto == id_produto,
+                Produto.quantidade_estoque >= quantidade,
+            )
+            .values(quantidade_estoque=Produto.quantidade_estoque - quantidade)
+            .execution_options(synchronize_session="evaluate")
+        )
+        resultado = self.db.execute(stmt)
+        return resultado.rowcount == 1

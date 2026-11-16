@@ -13,6 +13,7 @@ PERCENTUAL_DESCONTO = Decimal("0.05")
 
 class VendaService:
     def __init__(self, db: Session):
+        self.db = db
         self.venda_repository = VendaRepository(db)
         self.produto_repository = ProdutoRepository(db)
 
@@ -35,27 +36,32 @@ class VendaService:
         itens_venda: list[ItemVenda] = []
         valor_bruto = Decimal("0.00")
 
-        for id_produto, quantidade in quantidades_por_produto.items():
+        # Ordena por ID para evitar deadlocks quando duas vendas disputam os mesmos itens
+        for id_produto, quantidade in sorted(quantidades_por_produto.items()):
             produto = produtos_por_id.get(id_produto)
             if not produto:
+                self.db.rollback()
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Produto #{id_produto} não encontrado.",
                 )
 
-            if produto.quantidade_estoque < quantidade:
+            nome_produto = produto.nome
+            preco_unitario = Decimal(str(produto.preco)).quantize(Decimal("0.01"))
+
+            # Baixa atômica no estoque dentro da mesma transação da venda
+            if not self.produto_repository.baixar_estoque_atomico(id_produto, quantidade):
+                self.db.rollback()
+                atual = self.produto_repository.buscar_por_id(id_produto)
+                disponivel = atual.quantidade_estoque if atual else 0
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=(
-                        f"Estoque insuficiente para '{produto.nome}'. "
-                        f"Disponível: {produto.quantidade_estoque}, solicitado: {quantidade}."
+                        f"Estoque insuficiente para '{nome_produto}'. "
+                        f"Disponível: {disponivel}, solicitado: {quantidade}."
                     ),
                 )
 
-            # Baixa automática no estoque
-            produto.quantidade_estoque -= quantidade
-
-            preco_unitario = Decimal(str(produto.preco)).quantize(Decimal("0.01"))
             subtotal = (preco_unitario * quantidade).quantize(
                 Decimal("0.01"), rounding=ROUND_HALF_UP
             )
@@ -63,8 +69,8 @@ class VendaService:
 
             itens_venda.append(
                 ItemVenda(
-                    id_produto=produto.id_produto,
-                    nome_produto=produto.nome,
+                    id_produto=id_produto,
+                    nome_produto=nome_produto,
                     preco_unitario=preco_unitario,
                     quantidade=quantidade,
                     subtotal=subtotal,
