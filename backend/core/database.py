@@ -23,7 +23,9 @@ def _build_engine():
     url_str = settings.DATABASE_URL
 
     if url_str.startswith("postgres://"):
-        url_str = "postgresql://" + url_str[len("postgres://") :]
+        url_str = "postgresql+psycopg://" + url_str[len("postgres://") :]
+    elif url_str.startswith("postgresql://"):
+        url_str = "postgresql+psycopg://" + url_str[len("postgresql://") :]
 
     if url_str.startswith("postgresql"):
         pg_engine = create_engine(url_str, pool_pre_ping=True)

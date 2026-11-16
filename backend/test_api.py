@@ -1064,7 +1064,7 @@ def test_database_postgresql_e_sync_sequences(monkeypatch):
 
     _, backend = database_module._build_engine()
     assert backend == "postgresql"
-    assert urls_chamadas[0].startswith("postgresql://")
+    assert urls_chamadas[0].startswith("postgresql+psycopg://")
 
     # Valida que _sincronizar_sequences_postgres gera setval para todas as tabelas com PK única
     executados = []

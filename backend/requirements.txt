@@ -2,7 +2,7 @@ fastapi
 uvicorn
 sqlalchemy
 pymysql
-psycopg2-binary
+psycopg[binary]
 cryptography
 pydantic-settings
 pytest
