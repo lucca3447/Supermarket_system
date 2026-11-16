@@ -92,6 +92,10 @@ def test_home_status(client):
     assert "mensagem" in body
     assert body["banco"] in {"mysql", "sqlite", "sqlite-memory"}
 
+    health_res = client.get("/health")
+    assert health_res.status_code == 200
+    assert health_res.json()["status"] == "ok"
+
 
 def test_seed_produtos_iniciais_idempotente(db_session_factory, monkeypatch):
     monkeypatch.setattr(main_module, "SessionLocal", db_session_factory)

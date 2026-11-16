@@ -110,3 +110,11 @@ def home():
         "mensagem": "API do Supermercado TDE funcionando!",
         "banco": ACTIVE_DATABASE_BACKEND,
     }
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "banco": ACTIVE_DATABASE_BACKEND,
+    }

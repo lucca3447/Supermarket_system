@@ -23,7 +23,7 @@ def _definir_cookies_auth(
         key="access_token",
         value=access_token,
         httponly=True,
-        samesite="lax",
+        samesite=settings.COOKIE_SAMESITE,
         secure=settings.COOKIE_SECURE,
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
@@ -32,7 +32,7 @@ def _definir_cookies_auth(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        samesite="lax",
+        samesite=settings.COOKIE_SAMESITE,
         secure=settings.COOKIE_SECURE,
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
         path="/auth",
@@ -40,8 +40,20 @@ def _definir_cookies_auth(
 
 
 def _limpar_cookies_auth(response: Response) -> None:
-    response.delete_cookie(key="access_token", path="/", samesite="lax")
-    response.delete_cookie(key="refresh_token", path="/auth", samesite="lax")
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        httponly=True,
+        samesite=settings.COOKIE_SAMESITE,
+        secure=settings.COOKIE_SECURE,
+    )
+    response.delete_cookie(
+        key="refresh_token",
+        path="/auth",
+        httponly=True,
+        samesite=settings.COOKIE_SAMESITE,
+        secure=settings.COOKIE_SECURE,
+    )
 
 
 @router.post("/login", response_model=AuthResponse)
