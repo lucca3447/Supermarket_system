@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 # Isola os testes do MySQL local antes de importar a aplicação
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ.setdefault("SECRET_KEY", "test-secret-key-com-mais-de-32-chars")
 
 import httpx
 import pytest
