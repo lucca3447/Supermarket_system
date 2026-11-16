@@ -12,6 +12,7 @@ export const api = axios.create({
 
 let onUnauthorizedHandler = null
 let refreshEmAndamento = null
+let accessTokenMemoria = null
 
 export function setOnUnauthorized(handler) {
   onUnauthorizedHandler = handler
@@ -24,8 +25,28 @@ const ROTAS_AUTH_SEM_RETRY = [
   '/auth/logout',
 ]
 
+const ROTAS_EMITEM_TOKEN = ['/auth/login', '/auth/registrar', '/auth/refresh']
+
+api.interceptors.request.use((config) => {
+  if (accessTokenMemoria && config.headers) {
+    config.headers.Authorization = `Bearer ${accessTokenMemoria}`
+  }
+  return config
+})
+
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const url = response.config?.url || ''
+    if (url.includes('/auth/logout')) {
+      accessTokenMemoria = null
+    } else if (
+      ROTAS_EMITEM_TOKEN.some((rota) => url.includes(rota)) &&
+      response.data?.access_token
+    ) {
+      accessTokenMemoria = response.data.access_token
+    }
+    return response
+  },
   async (error) => {
     const originalRequest = error.config
     const status = error.response?.status
@@ -49,8 +70,12 @@ api.interceptors.response.use(
         })
       }
       await refreshEmAndamento
+      if (originalRequest.headers) {
+        delete originalRequest.headers.Authorization
+      }
       return api(originalRequest)
     } catch (refreshError) {
+      accessTokenMemoria = null
       onUnauthorizedHandler?.()
       return Promise.reject(refreshError)
     }

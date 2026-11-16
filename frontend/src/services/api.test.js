@@ -84,4 +84,35 @@ describe('api interceptor — refresh automático em 401', () => {
     expect(refreshChamado).toBe(0)
     expect(onUnauthorized).not.toHaveBeenCalled()
   })
+
+  it('usa access_token em memória como Bearer fallback quando cookies cross-site são bloqueados', async () => {
+    const authHeaders = []
+    api.defaults.adapter = async (config) => {
+      authHeaders.push({ url: config.url, auth: config.headers?.Authorization })
+      if (config.url === '/auth/login') {
+        return {
+          data: { access_token: 'jwt-mobile-123' },
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config,
+        }
+      }
+      return { data: [], status: 200, statusText: 'OK', headers: {}, config }
+    }
+
+    await api.post('/auth/login', { login: 'gerente', senha: '123' })
+    await api.get('/produtos/')
+    await api.post('/auth/logout')
+    await api.get('/produtos/')
+
+    expect(authHeaders[1]).toEqual({
+      url: '/produtos/',
+      auth: 'Bearer jwt-mobile-123',
+    })
+    expect(authHeaders[3]).toEqual({
+      url: '/produtos/',
+      auth: undefined,
+    })
+  })
 })
