@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from core.config import settings
 from core.database import ACTIVE_DATABASE_BACKEND, Base, SessionLocal, engine
 from core.security import gerar_hash_senha
+from core.sync_db import sincronizar_sqlite_para_mysql_se_vazio
 from models.produto_model import Produto
 from models.usuario_model import RefreshToken, Usuario  # noqa: F401 - garante registro das tabelas no metadata
 from models.venda_model import ItemVenda, Venda  # noqa: F401 - garante registro das tabelas no metadata
@@ -69,6 +70,8 @@ def seed_usuarios_iniciais():
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    if ACTIVE_DATABASE_BACKEND == "mysql":
+        sincronizar_sqlite_para_mysql_se_vazio(engine)
     seed_produtos_iniciais()
     seed_usuarios_iniciais()
     yield

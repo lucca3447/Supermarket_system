@@ -953,3 +953,90 @@ def test_insights_janela_30_dias_utc_e_paginacao_vendas(client, db_session_facto
     paginado = client.get("/vendas/?limit=1&offset=1").json()
     assert len(paginado) == 1
     assert paginado[0]["data_hora"].endswith("Z")
+
+
+def test_sync_db_migra_sqlite_para_destino_vazio_e_respeita_nao_vazio(tmp_path):
+    from core.sync_db import copiar_dados, sincronizar_sqlite_para_mysql_se_vazio
+    from models.venda_model import ItemVenda
+
+    sqlite_file = tmp_path / "origem.db"
+    origem_engine = create_engine(f"sqlite:///{sqlite_file}")
+    destino_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    _attach_sqlite_pragma(destino_engine)
+
+    try:
+        Base.metadata.create_all(bind=origem_engine)
+        Base.metadata.create_all(bind=destino_engine)
+
+        OrigemSession = sessionmaker(bind=origem_engine)
+        DestinoSession = sessionmaker(bind=destino_engine)
+
+        with OrigemSession() as db:
+            db.add(
+                Usuario(
+                    nome="Gerente",
+                    login="gerente",
+                    senha_hash="hash",
+                    perfil="gerente",
+                )
+            )
+            prod = Produto(
+                nome="Café Especial",
+                categoria="Bebidas",
+                unidade="pct",
+                preco=35,
+                quantidade_estoque=10,
+            )
+            db.add(prod)
+            db.flush()
+            db.add(
+                Venda(
+                    valor_bruto=35,
+                    desconto_aplicado=0,
+                    valor_final=35,
+                    teve_desconto=False,
+                    itens=[
+                        ItemVenda(
+                            id_produto=prod.id_produto,
+                            nome_produto="Café Especial",
+                            preco_unitario=35,
+                            quantidade=1,
+                            subtotal=35,
+                        )
+                    ],
+                )
+            )
+            db.commit()
+
+        # 1. Migra automaticamente quando o banco de destino está vazio
+        contagens = sincronizar_sqlite_para_mysql_se_vazio(
+            destino_engine, sqlite_path=sqlite_file
+        )
+        assert contagens is not None
+        assert contagens["produtos"] == 1
+        assert contagens["vendas"] == 1
+        assert contagens["itens_venda"] == 1
+        assert contagens["usuarios"] == 1
+
+        with DestinoSession() as db:
+            assert db.query(Produto).count() == 1
+            assert db.query(Venda).count() == 1
+
+        # 2. Se o destino já tem dados, não sobrescreve na inicialização
+        assert (
+            sincronizar_sqlite_para_mysql_se_vazio(
+                destino_engine, sqlite_path=sqlite_file
+            )
+            is None
+        )
+
+        # 3. limpar_destino=True permite sobrescrever com segurança
+        forcar = copiar_dados(origem_engine, destino_engine, limpar_destino=True)
+        assert forcar["produtos"] == 1
+    finally:
+        origem_engine.dispose()
+        destino_engine.dispose()
