@@ -1,5 +1,6 @@
 import json
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import httpx
@@ -17,6 +18,7 @@ from schemas.insight_schema import (
 )
 
 LIMITE_ESTOQUE_BAIXO = 5
+JANELA_DEMANDA_DIAS = 30
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
@@ -57,6 +59,9 @@ class InsightService:
     def _coletar_diagnostico(
         self, produtos: list[Produto], vendas: list[Venda]
     ) -> dict:
+        corte_demanda = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
+            days=JANELA_DEMANDA_DIAS
+        )
         demanda_por_id: dict[int, int] = defaultdict(int)
         saida_por_nome: dict[str, int] = defaultdict(int)
         faturamento_total = Decimal("0.00")
@@ -66,9 +71,15 @@ class InsightService:
             faturamento_total += Decimal(venda.valor_final)
             if venda.teve_desconto:
                 vendas_com_desconto += 1
+            data_venda = (
+                venda.data_hora.astimezone(timezone.utc).replace(tzinfo=None)
+                if venda.data_hora and venda.data_hora.tzinfo
+                else venda.data_hora
+            )
+            dentro_janela = data_venda is None or data_venda >= corte_demanda
             for item in venda.itens:
                 saida_por_nome[item.nome_produto] += item.quantidade
-                if item.id_produto is not None:
+                if item.id_produto is not None and dentro_janela:
                     demanda_por_id[item.id_produto] += item.quantidade
 
         alertas: list[AlertaEstoque] = []
