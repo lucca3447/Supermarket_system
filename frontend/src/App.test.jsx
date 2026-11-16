@@ -206,6 +206,11 @@ describe('Mercadinho Bom Preço — Fluxos completos com Auth e RBAC', () => {
 
     expect(await screen.findByText('Picanha Bovina')).toBeInTheDocument()
     expect(screen.getByText('Indisponível')).toBeDisabled()
+
+    // Botão Atualizar no cabeçalho recarrega produtos e vendas sem sair da tela
+    fireEvent.click(screen.getByRole('button', { name: 'Atualizar dados' }))
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/produtos/'))
+    expect(screen.getByText('Picanha Bovina')).toBeInTheDocument()
   })
 
   it('filtra gôndola, manipula cesta, aplica 5% OFF e finaliza compra', async () => {

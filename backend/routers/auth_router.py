@@ -35,7 +35,7 @@ def _definir_cookies_auth(
         samesite=settings.COOKIE_SAMESITE,
         secure=settings.COOKIE_SECURE,
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
-        path="/auth",
+        path="/",
     )
 
 
@@ -49,7 +49,7 @@ def _limpar_cookies_auth(response: Response) -> None:
     )
     response.delete_cookie(
         key="refresh_token",
-        path="/auth",
+        path="/",
         httponly=True,
         samesite=settings.COOKIE_SAMESITE,
         secure=settings.COOKIE_SECURE,

@@ -5,6 +5,7 @@ import {
   Boxes,
   History,
   LogOut,
+  RefreshCw,
   ShoppingCart,
   Store,
 } from 'lucide-react'
@@ -357,6 +358,16 @@ export default function App() {
                   {ehGerente ? 'Gerente' : 'Cliente'}
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={() => carregarDados()}
+                disabled={carregando}
+                aria-label="Atualizar dados"
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-mercado-900/80 px-3 py-2 text-xs font-semibold text-emerald-50 hover:bg-mercado-900 disabled:opacity-60"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${carregando ? 'animate-spin' : ''}`} />
+                Atualizar
+              </button>
               <button
                 type="button"
                 onClick={handleLogout}
