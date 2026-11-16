@@ -61,4 +61,27 @@ describe('api interceptor — refresh automático em 401', () => {
     await expect(api.post('/auth/login', {})).rejects.toThrow('Unauthorized')
     expect(onUnauthorized).toHaveBeenCalledTimes(1)
   })
+
+  it('pula /auth/refresh quando _skipAuthRefresh estiver ativo', async () => {
+    const onUnauthorized = vi.fn()
+    setOnUnauthorized(onUnauthorized)
+
+    let refreshChamado = 0
+    api.defaults.adapter = async (config) => {
+      if (config.url === '/auth/refresh') {
+        refreshChamado += 1
+        return { data: {}, status: 200, statusText: 'OK', headers: {}, config }
+      }
+      const error = new Error('Unauthorized')
+      error.config = config
+      error.response = { status: 401, data: { detail: 'Sem sessão' } }
+      throw error
+    }
+
+    await expect(
+      api.get('/auth/me', { _skipAuthRefresh: true }),
+    ).rejects.toThrow('Unauthorized')
+    expect(refreshChamado).toBe(0)
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
 })

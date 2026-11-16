@@ -15,6 +15,7 @@ import { LoginView } from './components/LoginView'
 import { api, setOnUnauthorized } from './services/api'
 
 const CARRINHO_STORAGE_KEY = 'carrinho_tde'
+const SESSAO_HINT_KEY = 'sessao_ativa_tde'
 
 const ABAS = [
   { id: 'caixa', path: '/caixa', label: 'Caixa / Simulação', icon: ShoppingCart, perfis: ['cliente', 'gerente'] },
@@ -55,6 +56,7 @@ export default function App() {
   }, [carrinho])
 
   const limparSessaoLocal = useCallback(() => {
+    localStorage.removeItem(SESSAO_HINT_KEY)
     setUsuario(null)
     setProdutos([])
     setVendas([])
@@ -71,13 +73,20 @@ export default function App() {
 
   useEffect(() => {
     let ativo = true
+    const temHintSessao = localStorage.getItem(SESSAO_HINT_KEY) === '1'
     api
-      .get('/auth/me')
+      .get('/auth/me', temHintSessao ? undefined : { _skipAuthRefresh: true })
       .then((res) => {
-        if (ativo) setUsuario(res.data)
+        if (ativo) {
+          localStorage.setItem(SESSAO_HINT_KEY, '1')
+          setUsuario(res.data)
+        }
       })
       .catch(() => {
-        if (ativo) setUsuario(null)
+        if (ativo) {
+          localStorage.removeItem(SESSAO_HINT_KEY)
+          setUsuario(null)
+        }
       })
       .finally(() => {
         if (ativo) setVerificandoSessao(false)
@@ -140,6 +149,7 @@ export default function App() {
   }, [usuario, carregarDados])
 
   function handleAutenticado(usuarioAutenticado) {
+    localStorage.setItem(SESSAO_HINT_KEY, '1')
     setUsuario(usuarioAutenticado)
     navigate('/caixa', { replace: true })
   }

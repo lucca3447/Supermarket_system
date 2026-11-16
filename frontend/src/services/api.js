@@ -35,6 +35,7 @@ api.interceptors.response.use(
       status !== 401 ||
       !originalRequest ||
       originalRequest._retry ||
+      originalRequest._skipAuthRefresh ||
       ROTAS_AUTH_SEM_RETRY.some((rota) => url.includes(rota))
     ) {
       return Promise.reject(error)
