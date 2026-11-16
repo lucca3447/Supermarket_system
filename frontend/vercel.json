@@ -5,7 +5,7 @@
       "destination": "https://supermercado-tde-api.onrender.com/:path*"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/|assets/|favicon\\.ico).*)",
       "destination": "/index.html"
     }
   ]

@@ -28,7 +28,9 @@ function lerCarrinhoSalvo() {
   try {
     const salvo = localStorage.getItem(CARRINHO_STORAGE_KEY)
     const parsed = salvo ? JSON.parse(salvo) : []
-    return Array.isArray(parsed) ? parsed : []
+    return Array.isArray(parsed)
+      ? parsed.filter((item) => item && item.id_produto && Number(item.quantidade) > 0)
+      : []
   } catch {
     return []
   }
@@ -78,9 +80,13 @@ export default function App() {
     api
       .get('/auth/me', temHintSessao ? undefined : { _skipAuthRefresh: true })
       .then((res) => {
-        if (ativo) {
+        if (!ativo) return
+        if (res.data && typeof res.data === 'object' && res.data.id_usuario) {
           localStorage.setItem(SESSAO_HINT_KEY, '1')
           setUsuario(res.data)
+        } else {
+          localStorage.removeItem(SESSAO_HINT_KEY)
+          setUsuario(null)
         }
       })
       .catch(() => {
@@ -109,10 +115,10 @@ export default function App() {
           api.get('/produtos/'),
           buscarVendas ? api.get('/vendas/') : Promise.resolve(null),
         ])
-        const listaProdutos = produtosRes.data
+        const listaProdutos = Array.isArray(produtosRes.data) ? produtosRes.data : []
         setProdutos(listaProdutos)
         if (vendasRes) {
-          setVendas(vendasRes.data)
+          setVendas(Array.isArray(vendasRes.data) ? vendasRes.data : [])
         }
         setDadosIniciaisCarregados(true)
 
