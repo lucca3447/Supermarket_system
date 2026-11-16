@@ -1044,3 +1044,35 @@ def test_sync_db_migra_sqlite_para_destino_vazio_e_respeita_nao_vazio(tmp_path):
     finally:
         origem_engine.dispose()
         destino_engine.dispose()
+
+
+def test_database_postgresql_e_sync_sequences(monkeypatch):
+    from core.sync_db import _sincronizar_sequences_postgres
+
+    urls_chamadas = []
+
+    def fake_create_engine(url, *args, **kwargs):
+        urls_chamadas.append(url)
+        return object()
+
+    monkeypatch.setattr(
+        database_module.settings,
+        "DATABASE_URL",
+        "postgres://user:pass@localhost:5432/supermercado_tde",
+    )
+    monkeypatch.setattr(database_module, "create_engine", fake_create_engine)
+
+    _, backend = database_module._build_engine()
+    assert backend == "postgresql"
+    assert urls_chamadas[0].startswith("postgresql://")
+
+    # Valida que _sincronizar_sequences_postgres gera setval para todas as tabelas com PK única
+    executados = []
+
+    class _FakeConn:
+        def execute(self, stmt, params=None):
+            executados.append((str(stmt), params))
+
+    _sincronizar_sequences_postgres(_FakeConn())
+    tabelas_com_setval = {params["tabela"] for _, params in executados}
+    assert {"produtos", "usuarios", "vendas", "itens_venda", "refresh_tokens"} <= tabelas_com_setval

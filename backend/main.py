@@ -70,7 +70,7 @@ def seed_usuarios_iniciais():
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    if ACTIVE_DATABASE_BACKEND == "mysql":
+    if ACTIVE_DATABASE_BACKEND in {"mysql", "postgresql"}:
         sincronizar_sqlite_para_mysql_se_vazio(engine)
     seed_produtos_iniciais()
     seed_usuarios_iniciais()

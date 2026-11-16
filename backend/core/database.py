@@ -19,8 +19,15 @@ def _attach_sqlite_pragma(eng):
 
 
 def _build_engine():
-    """Cria a engine SQLAlchemy garantindo o schema no MySQL, com fallback para SQLite se o MySQL estiver parado."""
+    """Cria a engine SQLAlchemy (MySQL com fallback para SQLite, PostgreSQL ou SQLite direto)."""
     url_str = settings.DATABASE_URL
+
+    if url_str.startswith("postgres://"):
+        url_str = "postgresql://" + url_str[len("postgres://") :]
+
+    if url_str.startswith("postgresql"):
+        pg_engine = create_engine(url_str, pool_pre_ping=True)
+        return pg_engine, "postgresql"
 
     if url_str.startswith("mysql"):
         try:

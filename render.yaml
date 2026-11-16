@@ -1,3 +1,9 @@
+databases:
+  - name: supermercado-tde-db
+    plan: free
+    databaseName: supermercado_tde
+    user: supermercado
+
 services:
   - type: web
     name: supermercado-tde-api
@@ -15,7 +21,9 @@ services:
       - key: CORS_ORIGINS
         sync: false
       - key: DATABASE_URL
-        value: sqlite:///./supermercado.db
+        fromDatabase:
+          name: supermercado-tde-db
+          property: connectionString
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL
