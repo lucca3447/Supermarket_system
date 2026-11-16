@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from core.auth_dependencies import get_current_user, require_gerente
@@ -12,11 +12,13 @@ router = APIRouter(prefix="/vendas", tags=["Vendas"])
 
 @router.get("/", response_model=list[VendaResponse])
 def listar_vendas(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     _: Usuario = Depends(require_gerente),
 ):
     service = VendaService(db)
-    return service.listar()
+    return service.listar(limit=limit, offset=offset)
 
 
 @router.post("/", response_model=VendaResponse, status_code=status.HTTP_201_CREATED)

@@ -87,45 +87,51 @@ export default function App() {
     }
   }, [])
 
-  const carregarDados = useCallback(async () => {
-    if (!usuario) return
-    setErro('')
-    setCarregando(true)
-    try {
-      const ehGerente = usuario.perfil === 'gerente'
-      const [produtosRes, vendasRes] = await Promise.all([
-        api.get('/produtos/'),
-        ehGerente ? api.get('/vendas/') : Promise.resolve({ data: [] }),
-      ])
-      const listaProdutos = produtosRes.data
-      setProdutos(listaProdutos)
-      setVendas(vendasRes.data)
-      setDadosIniciaisCarregados(true)
+  const carregarDados = useCallback(
+    async ({ incluirVendas = true } = {}) => {
+      if (!usuario) return
+      setErro('')
+      setCarregando(true)
+      try {
+        const ehGerente = usuario.perfil === 'gerente'
+        const buscarVendas = ehGerente && incluirVendas
+        const [produtosRes, vendasRes] = await Promise.all([
+          api.get('/produtos/'),
+          buscarVendas ? api.get('/vendas/') : Promise.resolve(null),
+        ])
+        const listaProdutos = produtosRes.data
+        setProdutos(listaProdutos)
+        if (vendasRes) {
+          setVendas(vendasRes.data)
+        }
+        setDadosIniciaisCarregados(true)
 
-      // Mantém a cesta salva sincronizada com preço e estoque reais do banco
-      setCarrinho((atual) =>
-        atual
-          .map((item) => {
-            const atualizado = listaProdutos.find(
-              (p) => p.id_produto === item.id_produto,
-            )
-            if (!atualizado || atualizado.quantidade_estoque <= 0) return null
-            return {
-              ...atualizado,
-              quantidade: Math.min(item.quantidade, atualizado.quantidade_estoque),
-            }
-          })
-          .filter(Boolean),
-      )
-    } catch (requestError) {
-      setErro(
-        requestError.response?.data?.detail ||
-          'Não foi possível conectar ao back-end FastAPI em http://localhost:8000.',
-      )
-    } finally {
-      setCarregando(false)
-    }
-  }, [usuario])
+        // Mantém a cesta salva sincronizada com preço e estoque reais do banco
+        setCarrinho((atual) =>
+          atual
+            .map((item) => {
+              const atualizado = listaProdutos.find(
+                (p) => p.id_produto === item.id_produto,
+              )
+              if (!atualizado || atualizado.quantidade_estoque <= 0) return null
+              return {
+                ...atualizado,
+                quantidade: Math.min(item.quantidade, atualizado.quantidade_estoque),
+              }
+            })
+            .filter(Boolean),
+        )
+      } catch (requestError) {
+        setErro(
+          requestError.response?.data?.detail ||
+            'Não foi possível conectar ao back-end FastAPI em http://localhost:8000.',
+        )
+      } finally {
+        setCarregando(false)
+      }
+    },
+    [usuario],
+  )
 
   useEffect(() => {
     if (usuario) {
@@ -217,7 +223,7 @@ export default function App() {
       } else {
         await api.post('/produtos/', payload)
       }
-      await carregarDados()
+      await carregarDados({ incluirVendas: false })
       return true
     } catch (requestError) {
       setErro(
@@ -234,7 +240,7 @@ export default function App() {
     setErro('')
     try {
       await api.patch(`/produtos/${produto.id_produto}/estoque`, { delta })
-      await carregarDados()
+      await carregarDados({ incluirVendas: false })
     } catch (requestError) {
       setErro(
         requestError.response?.data?.detail || 'Erro ao atualizar estoque.',
@@ -249,7 +255,7 @@ export default function App() {
     setErro('')
     try {
       await api.delete(`/produtos/${idProduto}`)
-      await carregarDados()
+      await carregarDados({ incluirVendas: false })
     } catch (requestError) {
       setErro(
         requestError.response?.data?.detail || 'Erro ao excluir produto.',
@@ -364,7 +370,7 @@ export default function App() {
             </div>
             <button
               type="button"
-              onClick={carregarDados}
+              onClick={() => carregarDados()}
               className="cursor-pointer rounded-lg bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
             >
               Tentar novamente

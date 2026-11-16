@@ -1,5 +1,4 @@
 import json
-from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -8,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from core.config import settings
 from models.produto_model import Produto
-from models.venda_model import Venda
 from repositories.produto_repository import ProdutoRepository
 from repositories.venda_repository import VendaRepository
 from schemas.insight_schema import (
@@ -31,8 +29,11 @@ class InsightService:
 
     def gerar_insights(self) -> InsightEstoqueResponse:
         produtos = self.produto_repo.listar()
-        vendas = self.venda_repo.listar()
-        diagnostico = self._coletar_diagnostico(produtos, vendas)
+        corte_demanda = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
+            days=JANELA_DEMANDA_DIAS
+        )
+        resumo_vendas = self.venda_repo.obter_resumo_insights(corte_demanda)
+        diagnostico = self._coletar_diagnostico(produtos, resumo_vendas)
 
         parecer_gemini = self._consultar_gemini(diagnostico)
         if parecer_gemini:
@@ -57,30 +58,13 @@ class InsightService:
         )
 
     def _coletar_diagnostico(
-        self, produtos: list[Produto], vendas: list[Venda]
+        self, produtos: list[Produto], resumo_vendas: dict
     ) -> dict:
-        corte_demanda = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
-            days=JANELA_DEMANDA_DIAS
-        )
-        demanda_por_id: dict[int, int] = defaultdict(int)
-        saida_por_nome: dict[str, int] = defaultdict(int)
-        faturamento_total = Decimal("0.00")
-        vendas_com_desconto = 0
-
-        for venda in vendas:
-            faturamento_total += Decimal(venda.valor_final)
-            if venda.teve_desconto:
-                vendas_com_desconto += 1
-            data_venda = (
-                venda.data_hora.astimezone(timezone.utc).replace(tzinfo=None)
-                if venda.data_hora and venda.data_hora.tzinfo
-                else venda.data_hora
-            )
-            dentro_janela = data_venda is None or data_venda >= corte_demanda
-            for item in venda.itens:
-                saida_por_nome[item.nome_produto] += item.quantidade
-                if item.id_produto is not None and dentro_janela:
-                    demanda_por_id[item.id_produto] += item.quantidade
+        demanda_por_id: dict[int, int] = resumo_vendas["demanda_por_id"]
+        faturamento_total: Decimal = resumo_vendas["faturamento_total"]
+        vendas_com_desconto: int = resumo_vendas["vendas_com_desconto"]
+        total_vendas: int = resumo_vendas["total_vendas"]
+        top_vendidos: list[dict] = resumo_vendas["top_vendidos"]
 
         alertas: list[AlertaEstoque] = []
         sem_giro: list[str] = []
@@ -120,16 +104,11 @@ class InsightService:
 
         alertas.sort(key=lambda a: (0 if a.nivel == "critico" else 1, a.estoque_atual, a.nome))
 
-        top_vendidos = [
-            {"nome": nome, "quantidade": qtd}
-            for nome, qtd in sorted(saida_por_nome.items(), key=lambda par: (-par[1], par[0]))[:3]
-        ]
-
         metricas = MetricasInsight(
             total_produtos=len(produtos),
             itens_criticos=sum(1 for a in alertas if a.nivel == "critico"),
             itens_atencao=sum(1 for a in alertas if a.nivel == "atencao"),
-            total_vendas=len(vendas),
+            total_vendas=total_vendas,
             vendas_com_desconto=vendas_com_desconto,
             faturamento_total=faturamento_total.quantize(Decimal("0.01")),
         )

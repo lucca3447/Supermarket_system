@@ -17,8 +17,8 @@ class VendaService:
         self.venda_repository = VendaRepository(db)
         self.produto_repository = ProdutoRepository(db)
 
-    def listar(self) -> list[Venda]:
-        return self.venda_repository.listar()
+    def listar(self, limit: int = 100, offset: int = 0) -> list[Venda]:
+        return self.venda_repository.listar(limit=limit, offset=offset)
 
     def registrar_venda(self, payload: VendaCreate) -> Venda:
         # Agrupa quantidades caso o mesmo produto apareça mais de uma vez no carrinho
