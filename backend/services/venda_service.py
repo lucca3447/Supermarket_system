@@ -47,7 +47,9 @@ class VendaService:
                 )
 
             nome_produto = produto.nome
-            preco_unitario = Decimal(str(produto.preco)).quantize(Decimal("0.01"))
+            preco_unitario = Decimal(str(produto.preco)).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
 
             # Baixa atômica no estoque dentro da mesma transação da venda
             if not self.produto_repository.baixar_estoque_atomico(id_produto, quantidade):
