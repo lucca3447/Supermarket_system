@@ -38,6 +38,7 @@ export default function App() {
   const [verificandoSessao, setVerificandoSessao] = useState(true)
   const [produtos, setProdutos] = useState([])
   const [vendas, setVendas] = useState([])
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
   const [carrinho, setCarrinho] = useState(lerCarrinhoSalvo)
   const [carregando, setCarregando] = useState(false)
   const [salvando, setSalvando] = useState(false)
@@ -57,6 +58,7 @@ export default function App() {
     setUsuario(null)
     setProdutos([])
     setVendas([])
+    setDadosIniciaisCarregados(false)
     setUltimaVenda(null)
     setErro('')
     navigate('/login', { replace: true })
@@ -98,6 +100,7 @@ export default function App() {
       const listaProdutos = produtosRes.data
       setProdutos(listaProdutos)
       setVendas(vendasRes.data)
+      setDadosIniciaisCarregados(true)
 
       // Mantém a cesta salva sincronizada com preço e estoque reais do banco
       setCarrinho((atual) =>
@@ -369,7 +372,7 @@ export default function App() {
           </div>
         )}
 
-        {carregando ? (
+        {!dadosIniciaisCarregados && !erro ? (
           <div className="rounded-2xl border border-stone-200 bg-white p-12 text-center text-sm text-stone-600">
             Carregando catálogo e histórico de vendas...
           </div>
