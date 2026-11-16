@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -46,7 +47,14 @@ class AuthService:
             senha_hash=gerar_hash_senha(payload.senha),
             perfil="cliente",
         )
-        usuario = self.repo.criar(novo_usuario)
+        try:
+            usuario = self.repo.criar(novo_usuario)
+        except IntegrityError:
+            self.repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Este login já está em uso.",
+            )
         return self._emitir_par_tokens(usuario)
 
     def rotacionar_refresh(self, refresh_token_bruto: str) -> tuple[str, str, Usuario]:
@@ -64,7 +72,12 @@ class AuthService:
                 detail="Usuário não encontrado.",
             )
 
-        self.repo.revogar_refresh_token(registro)
+        if not self.repo.revogar_refresh_se_ativo(registro.id_token):
+            self.repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Sessão expirada. Faça login novamente.",
+            )
         return self._emitir_par_tokens(usuario)
 
     def revogar_refresh(self, refresh_token_bruto: str | None) -> None:

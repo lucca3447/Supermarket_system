@@ -1,3 +1,4 @@
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from models.usuario_model import RefreshToken, Usuario
@@ -27,10 +28,15 @@ class UsuarioRepository:
         self.db.refresh(usuario)
         return usuario
 
-    def salvar_refresh_token(self, token: RefreshToken) -> RefreshToken:
+    def salvar_refresh_token(
+        self, token: RefreshToken, commit: bool = True
+    ) -> RefreshToken:
         self.db.add(token)
-        self.db.commit()
-        self.db.refresh(token)
+        if commit:
+            self.db.commit()
+            self.db.refresh(token)
+        else:
+            self.db.flush()
         return token
 
     def buscar_refresh_por_hash(self, token_hash: str) -> RefreshToken | None:
@@ -43,3 +49,15 @@ class UsuarioRepository:
     def revogar_refresh_token(self, token: RefreshToken) -> None:
         token.revoked = True
         self.db.commit()
+
+    def revogar_refresh_se_ativo(self, id_token: int) -> bool:
+        stmt = (
+            update(RefreshToken)
+            .where(
+                RefreshToken.id_token == id_token,
+                RefreshToken.revoked.is_(False),
+            )
+            .values(revoked=True)
+            .execution_options(synchronize_session="evaluate")
+        )
+        return self.db.execute(stmt).rowcount == 1
