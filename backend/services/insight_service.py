@@ -34,9 +34,10 @@ class InsightService:
 
         parecer_gemini = self._consultar_gemini(diagnostico)
         if parecer_gemini:
+            modelo_ativo = settings.GEMINI_MODEL.strip() or "gemini-3.1-flash-lite"
             return InsightEstoqueResponse(
                 origem="gemini",
-                modelo=settings.GEMINI_MODEL,
+                modelo=modelo_ativo,
                 resumo_executivo=parecer_gemini["resumo_executivo"],
                 recomendacoes=parecer_gemini["recomendacoes"],
                 alertas=diagnostico["alertas"],
@@ -177,7 +178,12 @@ class InsightService:
         }
 
         try:
-            response = httpx.post(url, params={"key": api_key}, json=payload, timeout=15.0)
+            response = httpx.post(
+                url,
+                headers={"x-goog-api-key": api_key},
+                json=payload,
+                timeout=15.0,
+            )
             response.raise_for_status()
             data = response.json()
             texto = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -202,7 +208,7 @@ class InsightService:
                 "recomendacoes": recomendacoes_limpas,
             }
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
-            print(f"[AVISO] Gemini indisponível ({exc}). Usando análise local.")
+            print(f"[AVISO] Gemini indisponível ({type(exc).__name__}). Usando análise local.")
             return None
 
     def _gerar_analise_local(self, diagnostico: dict) -> dict:

@@ -543,9 +543,9 @@ def test_insights_estoque_gemini_sucesso(client, monkeypatch):
 
     captured = {}
 
-    def fake_post(url, params=None, json=None, timeout=None):
+    def fake_post(url, headers=None, json=None, timeout=None):
         captured["url"] = url
-        captured["params"] = params
+        captured["headers"] = headers
         captured["timeout"] = timeout
         return _FakeResponse()
 
@@ -559,7 +559,7 @@ def test_insights_estoque_gemini_sucesso(client, monkeypatch):
     assert body["resumo_executivo"] == "Há 1 item crítico exigindo reposição imediata."
     assert len(body["recomendacoes"]) == 2
     assert "gemini-3.1-flash-lite:generateContent" in captured["url"]
-    assert captured["params"] == {"key": "fake-gemini-key"}
+    assert captured["headers"] == {"x-goog-api-key": "fake-gemini-key"}
 
 
 def test_insights_estoque_gemini_fallback_em_falhas(client, monkeypatch):
