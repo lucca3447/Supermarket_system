@@ -1,45 +1,105 @@
 import { useCallback, useEffect, useState } from 'react'
+import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import {
   AlertCircle,
   Boxes,
   History,
+  LogOut,
   ShoppingCart,
   Store,
 } from 'lucide-react'
 import { CaixaView } from './components/CaixaView'
 import { EstoqueView } from './components/EstoqueView'
 import { HistoricoView } from './components/HistoricoView'
-import { api } from './services/api'
+import { LoginView } from './components/LoginView'
+import { api, setOnUnauthorized } from './services/api'
+
+const CARRINHO_STORAGE_KEY = 'carrinho_tde'
 
 const ABAS = [
-  { id: 'caixa', label: 'Caixa / Simulação', icon: ShoppingCart },
-  { id: 'estoque', label: 'Produtos e Estoque', icon: Boxes },
-  { id: 'historico', label: 'Histórico de Vendas', icon: History },
+  { id: 'caixa', path: '/caixa', label: 'Caixa / Simulação', icon: ShoppingCart, perfis: ['cliente', 'gerente'] },
+  { id: 'estoque', path: '/estoque', label: 'Produtos e Estoque', icon: Boxes, perfis: ['gerente'] },
+  { id: 'historico', path: '/historico', label: 'Histórico de Vendas', icon: History, perfis: ['gerente'] },
 ]
 
+function lerCarrinhoSalvo() {
+  try {
+    const salvo = localStorage.getItem(CARRINHO_STORAGE_KEY)
+    const parsed = salvo ? JSON.parse(salvo) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 export default function App() {
-  const [abaAtiva, setAbaAtiva] = useState('caixa')
+  const navigate = useNavigate()
+  const [usuario, setUsuario] = useState(null)
+  const [verificandoSessao, setVerificandoSessao] = useState(true)
   const [produtos, setProdutos] = useState([])
   const [vendas, setVendas] = useState([])
-  const [carrinho, setCarrinho] = useState([])
-  const [carregando, setCarregando] = useState(true)
+  const [carrinho, setCarrinho] = useState(lerCarrinhoSalvo)
+  const [carregando, setCarregando] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [finalizando, setFinalizando] = useState(false)
   const [erro, setErro] = useState('')
   const [ultimaVenda, setUltimaVenda] = useState(null)
 
-  const carregarDados = useCallback(async () => {
-    setErro('')
+  useEffect(() => {
     try {
+      localStorage.setItem(CARRINHO_STORAGE_KEY, JSON.stringify(carrinho))
+    } catch {
+      // Ignora erro de quota do navegador
+    }
+  }, [carrinho])
+
+  const limparSessaoLocal = useCallback(() => {
+    setUsuario(null)
+    setProdutos([])
+    setVendas([])
+    setUltimaVenda(null)
+    setErro('')
+    navigate('/login', { replace: true })
+  }, [navigate])
+
+  useEffect(() => {
+    setOnUnauthorized(limparSessaoLocal)
+    return () => setOnUnauthorized(null)
+  }, [limparSessaoLocal])
+
+  useEffect(() => {
+    let ativo = true
+    api
+      .get('/auth/me')
+      .then((res) => {
+        if (ativo) setUsuario(res.data)
+      })
+      .catch(() => {
+        if (ativo) setUsuario(null)
+      })
+      .finally(() => {
+        if (ativo) setVerificandoSessao(false)
+      })
+    return () => {
+      ativo = false
+    }
+  }, [])
+
+  const carregarDados = useCallback(async () => {
+    if (!usuario) return
+    setErro('')
+    setCarregando(true)
+    try {
+      const ehGerente = usuario.perfil === 'gerente'
       const [produtosRes, vendasRes] = await Promise.all([
         api.get('/produtos/'),
-        api.get('/vendas/'),
+        ehGerente ? api.get('/vendas/') : Promise.resolve({ data: [] }),
       ])
       const listaProdutos = produtosRes.data
       setProdutos(listaProdutos)
       setVendas(vendasRes.data)
 
-      // Mantém a cesta sincronizada caso estoque ou preço tenham mudado na aba de CRUD
+      // Mantém a cesta salva sincronizada com preço e estoque reais do banco
       setCarrinho((atual) =>
         atual
           .map((item) => {
@@ -57,16 +117,30 @@ export default function App() {
     } catch (requestError) {
       setErro(
         requestError.response?.data?.detail ||
-          'Não foi possível conectar ao back-end FastAPI em http://127.0.0.1:8000.',
+          'Não foi possível conectar ao back-end FastAPI em http://localhost:8000.',
       )
     } finally {
       setCarregando(false)
     }
-  }, [])
+  }, [usuario])
 
   useEffect(() => {
-    carregarDados()
-  }, [carregarDados])
+    if (usuario) {
+      carregarDados()
+    }
+  }, [usuario, carregarDados])
+
+  function handleAutenticado(usuarioAutenticado) {
+    setUsuario(usuarioAutenticado)
+    navigate('/caixa', { replace: true })
+  }
+
+  async function handleLogout() {
+    await api.post('/auth/logout').catch(() => {})
+    setCarrinho([])
+    localStorage.removeItem(CARRINHO_STORAGE_KEY)
+    limparSessaoLocal()
+  }
 
   function adicionarAoCarrinho(produto) {
     setUltimaVenda(null)
@@ -189,7 +263,29 @@ export default function App() {
     }
   }
 
+  if (verificandoSessao) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-kraft-50 text-sm text-stone-600">
+        Verificando sessão...
+      </div>
+    )
+  }
+
+  if (!usuario) {
+    return (
+      <Routes>
+        <Route
+          path="/login"
+          element={<LoginView onAutenticado={handleAutenticado} />}
+        />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    )
+  }
+
+  const abasPermitidas = ABAS.filter((aba) => aba.perfis.includes(usuario.perfil))
   const totalItensCesta = carrinho.reduce((acc, item) => acc + item.quantidade, 0)
+  const ehGerente = usuario.perfil === 'gerente'
 
   return (
     <div className="min-h-screen bg-kraft-50">
@@ -209,37 +305,57 @@ export default function App() {
             </div>
           </div>
 
-          <nav className="flex flex-wrap gap-2" aria-label="Navegação principal">
-            {ABAS.map((aba) => {
-              const Icone = aba.icon
-              const ativa = abaAtiva === aba.id
-              return (
-                <button
-                  key={aba.id}
-                  type="button"
-                  onClick={() => setAbaAtiva(aba.id)}
-                  className={`inline-flex cursor-pointer items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition sm:text-sm ${
-                    ativa
-                      ? 'bg-oferta-400 text-oferta-950 shadow-xs'
-                      : 'bg-mercado-900/60 text-emerald-50 hover:bg-mercado-900'
-                  }`}
-                >
-                  <Icone className="h-4 w-4" />
-                  <span>{aba.label}</span>
-                  {aba.id === 'caixa' && totalItensCesta > 0 && (
-                    <span className="font-fiscal rounded-full bg-mercado-800 px-1.5 py-0.5 text-[11px] text-white">
-                      {totalItensCesta}
-                    </span>
-                  )}
-                  {aba.id === 'historico' && vendas.length > 0 && (
-                    <span className="font-fiscal rounded-full bg-white/20 px-1.5 py-0.5 text-[11px]">
-                      {vendas.length}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </nav>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <nav className="flex flex-wrap gap-2" aria-label="Navegação principal">
+              {abasPermitidas.map((aba) => {
+                const Icone = aba.icon
+                return (
+                  <NavLink
+                    key={aba.id}
+                    to={aba.path}
+                    className={({ isActive }) =>
+                      `inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition sm:text-sm ${
+                        isActive
+                          ? 'bg-oferta-400 text-oferta-950 shadow-xs'
+                          : 'bg-mercado-900/60 text-emerald-50 hover:bg-mercado-900'
+                      }`
+                    }
+                  >
+                    <Icone className="h-4 w-4" />
+                    <span>{aba.label}</span>
+                    {aba.id === 'caixa' && totalItensCesta > 0 && (
+                      <span className="font-fiscal rounded-full bg-mercado-800 px-1.5 py-0.5 text-[11px] text-white">
+                        {totalItensCesta}
+                      </span>
+                    )}
+                    {aba.id === 'historico' && vendas.length > 0 && (
+                      <span className="font-fiscal rounded-full bg-white/20 px-1.5 py-0.5 text-[11px]">
+                        {vendas.length}
+                      </span>
+                    )}
+                  </NavLink>
+                )
+              })}
+            </nav>
+
+            <div className="flex items-center gap-2 border-l border-emerald-700/70 pl-3">
+              <div className="text-right">
+                <p className="text-xs font-semibold text-white">{usuario.nome}</p>
+                <p className="text-[10px] font-bold tracking-wider text-oferta-400 uppercase">
+                  {ehGerente ? 'Gerente' : 'Cliente'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                aria-label="Sair"
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-mercado-900/80 px-3 py-2 text-xs font-semibold text-emerald-50 hover:bg-mercado-900"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Sair
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -265,34 +381,53 @@ export default function App() {
             Carregando catálogo e histórico de vendas...
           </div>
         ) : (
-          <>
-            {abaAtiva === 'caixa' && (
-              <CaixaView
-                produtos={produtos}
-                carrinho={carrinho}
-                onAdicionar={adicionarAoCarrinho}
-                onAlterarQuantidade={alterarQuantidadeCarrinho}
-                onRemover={removerDoCarrinho}
-                onLimpar={() => setCarrinho([])}
-                onFinalizarCompra={finalizarCompra}
-                finalizando={finalizando}
-                ultimaVenda={ultimaVenda}
-                onFecharRecibo={() => setUltimaVenda(null)}
-              />
-            )}
-
-            {abaAtiva === 'estoque' && (
-              <EstoqueView
-                produtos={produtos}
-                onSalvarProduto={salvarProduto}
-                onAjustarEstoque={ajustarEstoqueRapido}
-                onExcluirProduto={excluirProduto}
-                salvando={salvando}
-              />
-            )}
-
-            {abaAtiva === 'historico' && <HistoricoView vendas={vendas} />}
-          </>
+          <Routes>
+            <Route
+              path="/caixa"
+              element={
+                <CaixaView
+                  produtos={produtos}
+                  carrinho={carrinho}
+                  onAdicionar={adicionarAoCarrinho}
+                  onAlterarQuantidade={alterarQuantidadeCarrinho}
+                  onRemover={removerDoCarrinho}
+                  onLimpar={() => setCarrinho([])}
+                  onFinalizarCompra={finalizarCompra}
+                  finalizando={finalizando}
+                  ultimaVenda={ultimaVenda}
+                  onFecharRecibo={() => setUltimaVenda(null)}
+                />
+              }
+            />
+            <Route
+              path="/estoque"
+              element={
+                ehGerente ? (
+                  <EstoqueView
+                    produtos={produtos}
+                    onSalvarProduto={salvarProduto}
+                    onAjustarEstoque={ajustarEstoqueRapido}
+                    onExcluirProduto={excluirProduto}
+                    salvando={salvando}
+                  />
+                ) : (
+                  <Navigate to="/caixa" replace />
+                )
+              }
+            />
+            <Route
+              path="/historico"
+              element={
+                ehGerente ? (
+                  <HistoricoView vendas={vendas} />
+                ) : (
+                  <Navigate to="/caixa" replace />
+                )
+              }
+            />
+            <Route path="/login" element={<Navigate to="/caixa" replace />} />
+            <Route path="*" element={<Navigate to="/caixa" replace />} />
+          </Routes>
         )}
       </main>
     </div>
