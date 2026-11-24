@@ -77,11 +77,23 @@ export function EstoqueView({
       setErroForm('Informe um nome com pelo menos 2 caracteres.')
       return
     }
+    if (form.nome.trim().length > 100) {
+      setErroForm('O nome do produto deve ter no máximo 100 caracteres.')
+      return
+    }
+    if (form.categoria.trim().length > 50) {
+      setErroForm('A categoria deve ter no máximo 50 caracteres.')
+      return
+    }
     if (!Number.isFinite(precoNum) || precoNum <= 0) {
       setErroForm('O preço precisa ser maior que R$ 0,00.')
       return
     }
-    if (!Number.isInteger(estoqueNum) || estoqueNum < 0) {
+    if (precoNum > 99999999.99) {
+      setErroForm('O preço deve ser menor que R$ 100.000.000,00.')
+      return
+    }
+    if (!Number.isInteger(estoqueNum) || estoqueNum < 0 || estoqueNum > 2147483647) {
       setErroForm('A quantidade em estoque deve ser um número inteiro maior ou igual a zero.')
       return
     }
@@ -126,12 +138,19 @@ export function EstoqueView({
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-3.5">
           <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-700">
+            <label
+              htmlFor="produto-nome"
+              className="mb-1 block text-xs font-semibold text-stone-700"
+            >
               Nome do produto
             </label>
             <input
+              id="produto-nome"
+              name="nome"
               type="text"
               required
+              minLength={2}
+              maxLength={100}
               value={form.nome}
               onChange={(e) => setForm({ ...form, nome: e.target.value })}
               placeholder="Ex: Café Especial 500g"
@@ -141,13 +160,20 @@ export function EstoqueView({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-stone-700">
+              <label
+                htmlFor="produto-categoria"
+                className="mb-1 block text-xs font-semibold text-stone-700"
+              >
                 Categoria
               </label>
               <input
+                id="produto-categoria"
+                name="categoria"
                 type="text"
                 list="categorias-sugestao"
                 required
+                minLength={2}
+                maxLength={50}
                 value={form.categoria}
                 onChange={(e) => setForm({ ...form, categoria: e.target.value })}
                 className="w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-stone-900 outline-none focus:border-mercado-800 focus:ring-2 focus:ring-mercado-800/15"
@@ -160,13 +186,18 @@ export function EstoqueView({
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-semibold text-stone-700">
+              <label
+                htmlFor="produto-unidade"
+                className="mb-1 block text-xs font-semibold text-stone-700"
+              >
                 Unidade
               </label>
               <select
+                id="produto-unidade"
+                name="unidade"
                 value={form.unidade}
                 onChange={(e) => setForm({ ...form, unidade: e.target.value })}
-                className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-mercado-800 focus:ring-2 focus:ring-mercado-800/15"
+                className="w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-stone-900 outline-none focus:border-mercado-800 focus:ring-2 focus:ring-mercado-800/15"
               >
                 <option value="un">un (Unidade)</option>
                 <option value="kg">kg (Quilo)</option>
@@ -180,13 +211,19 @@ export function EstoqueView({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-stone-700">
+              <label
+                htmlFor="produto-preco"
+                className="mb-1 block text-xs font-semibold text-stone-700"
+              >
                 Preço (R$)
               </label>
               <input
+                id="produto-preco"
+                name="preco"
                 type="number"
                 step="0.01"
                 min="0.01"
+                max="99999999.99"
                 required
                 value={form.preco}
                 onChange={(e) => setForm({ ...form, preco: e.target.value })}
@@ -196,12 +233,18 @@ export function EstoqueView({
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-semibold text-stone-700">
+              <label
+                htmlFor="produto-estoque"
+                className="mb-1 block text-xs font-semibold text-stone-700"
+              >
                 Estoque inicial
               </label>
               <input
+                id="produto-estoque"
+                name="quantidade_estoque"
                 type="number"
                 min="0"
+                max="2147483647"
                 step="1"
                 required
                 value={form.quantidade_estoque}
@@ -215,7 +258,7 @@ export function EstoqueView({
           </div>
 
           {erroForm && (
-            <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+            <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
               {erroForm}
             </p>
           )}
@@ -260,7 +303,8 @@ export function EstoqueView({
           <div className="relative w-full sm:w-60">
             <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-stone-400" />
             <input
-              type="text"
+              type="search"
+              maxLength={100}
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Filtrar na tabela..."
@@ -365,7 +409,7 @@ export function EstoqueView({
                             <button
                               type="button"
                               onClick={() => setConfirmDeleteId(null)}
-                              className="cursor-pointer rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs text-stone-600 hover:bg-kraft-100"
+                              className="cursor-pointer rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-600 hover:bg-kraft-100"
                             >
                               Não
                             </button>

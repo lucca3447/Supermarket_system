@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { api } from '../services/api'
 import {
   calcularResumoCarrinho,
+  extrairMensagemErro,
   formatBRL,
   formatDateTime,
 } from './format'
@@ -61,5 +62,36 @@ describe('format.js e api.js', () => {
     expect(api.defaults.baseURL).toBe('http://localhost:8000')
     expect(api.defaults.withCredentials).toBe(true)
     expect(api.defaults.headers['Content-Type']).toBe('application/json')
+  })
+
+  it('extrairMensagemErro trata string, lista 422 do FastAPI e fallback', () => {
+    expect(
+      extrairMensagemErro(
+        { response: { data: { detail: 'Produto não encontrado.' } } },
+        'Erro padrão',
+      ),
+    ).toBe('Produto não encontrado.')
+
+    expect(
+      extrairMensagemErro(
+        {
+          response: {
+            data: {
+              detail: [
+                { msg: 'String should have at most 100 characters' },
+                'Outro erro',
+              ],
+            },
+          },
+        },
+        'Erro padrão',
+      ),
+    ).toBe('String should have at most 100 characters · Outro erro')
+
+    expect(
+      extrairMensagemErro({ response: { data: { detail: [{}] } } }, 'Erro padrão'),
+    ).toBe('Erro padrão')
+
+    expect(extrairMensagemErro(new Error('Rede'), 'Erro padrão')).toBe('Erro padrão')
   })
 })

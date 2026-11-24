@@ -19,6 +19,22 @@ export function formatDateTime(value) {
   return dateTimeFormatter.format(new Date(value))
 }
 
+export function extrairMensagemErro(requestError, fallback) {
+  const detail = requestError?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail
+  }
+  if (Array.isArray(detail) && detail.length > 0) {
+    const mensagens = detail
+      .map((item) => (typeof item === 'string' ? item : item?.msg))
+      .filter(Boolean)
+    if (mensagens.length > 0) {
+      return mensagens.join(' · ')
+    }
+  }
+  return fallback
+}
+
 // Cálculo exato em centavos para espelhar a regra de negócio do back-end (> R$ 200,00)
 export function calcularResumoCarrinho(carrinho) {
   const brutoCentavos = carrinho.reduce((acc, item) => {

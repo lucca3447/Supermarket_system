@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { KeyRound, LogIn, ShieldCheck, Store, UserPlus } from 'lucide-react'
 import { api } from '../services/api'
+import { extrairMensagemErro } from '../utils/format'
 
 export function LoginView({ onAutenticado }) {
   const [modo, setModo] = useState('entrar')
@@ -35,8 +36,10 @@ export function LoginView({ onAutenticado }) {
       onAutenticado(res.data.usuario)
     } catch (requestError) {
       setErro(
-        requestError.response?.data?.detail ||
+        extrairMensagemErro(
+          requestError,
           'Não foi possível autenticar. Verifique os dados informados.',
+        ),
       )
     } finally {
       setEnviando(false)
@@ -98,9 +101,12 @@ export function LoginView({ onAutenticado }) {
               </label>
               <input
                 id="auth-nome"
+                name="nome"
                 type="text"
                 required
                 minLength={2}
+                maxLength={100}
+                autoComplete="name"
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
                 placeholder="Ex: Maria Oliveira"
@@ -118,9 +124,15 @@ export function LoginView({ onAutenticado }) {
             </label>
             <input
               id="auth-login"
+              name="login"
               type="text"
               required
               minLength={2}
+              maxLength={50}
+              autoComplete="username"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
               value={login}
               onChange={(e) => setLogin(e.target.value)}
               placeholder="Ex: gerente ou cliente"
@@ -137,9 +149,12 @@ export function LoginView({ onAutenticado }) {
             </label>
             <input
               id="auth-senha"
+              name="senha"
               type="password"
               required
               minLength={4}
+              maxLength={72}
+              autoComplete={modo === 'entrar' ? 'current-password' : 'new-password'}
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
               placeholder="••••••"
@@ -148,7 +163,7 @@ export function LoginView({ onAutenticado }) {
           </div>
 
           {erro && (
-            <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+            <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
               {erro}
             </p>
           )}

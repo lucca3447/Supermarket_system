@@ -148,7 +148,7 @@ cd frontend
 npm run test:coverage
 ```
 
-- **18 testes** em `App.test.jsx`, `api.test.js` e `format.test.js`, validando login/registro, RBAC nas rotas, persistência da cesta no `localStorage`, auto-refresh em `401`, cálculo em centavos, CRUD de produtos e geração de insights (`98,63%` de cobertura em linhas).
+- **19 testes** em `App.test.jsx`, `api.test.js` e `format.test.js`, validando login/registro, RBAC nas rotas, persistência da cesta no `localStorage`, auto-refresh em `401`, limites de formulário e tratamento de erros `422`, cálculo em centavos, CRUD de produtos e geração de insights (`98,69%` de cobertura em linhas).
 
 ### Integração Contínua
 

@@ -14,6 +14,7 @@ import { EstoqueView } from './components/EstoqueView'
 import { HistoricoView } from './components/HistoricoView'
 import { LoginView } from './components/LoginView'
 import { api, setOnUnauthorized } from './services/api'
+import { extrairMensagemErro } from './utils/format'
 
 const CARRINHO_STORAGE_KEY = 'carrinho_tde'
 const SESSAO_HINT_KEY = 'sessao_ativa_tde'
@@ -142,8 +143,10 @@ export default function App() {
       } catch (requestError) {
         if (!silencioso) {
           setErro(
-            requestError.response?.data?.detail ||
+            extrairMensagemErro(
+              requestError,
               'Não foi possível conectar ao servidor da API.',
+            ),
           )
         }
       } finally {
@@ -244,8 +247,10 @@ export default function App() {
       await carregarDados()
     } catch (requestError) {
       setErro(
-        requestError.response?.data?.detail ||
+        extrairMensagemErro(
+          requestError,
           'Erro ao finalizar a compra. Verifique o estoque disponível.',
+        ),
       )
     } finally {
       setFinalizando(false)
@@ -265,7 +270,7 @@ export default function App() {
       return true
     } catch (requestError) {
       setErro(
-        requestError.response?.data?.detail || 'Erro ao salvar produto no banco.',
+        extrairMensagemErro(requestError, 'Erro ao salvar produto no banco.'),
       )
       return false
     } finally {
@@ -281,7 +286,7 @@ export default function App() {
       await carregarDados({ incluirVendas: false })
     } catch (requestError) {
       setErro(
-        requestError.response?.data?.detail || 'Erro ao atualizar estoque.',
+        extrairMensagemErro(requestError, 'Erro ao atualizar estoque.'),
       )
     } finally {
       setSalvando(false)
@@ -296,7 +301,7 @@ export default function App() {
       await carregarDados({ incluirVendas: false })
     } catch (requestError) {
       setErro(
-        requestError.response?.data?.detail || 'Erro ao excluir produto.',
+        extrairMensagemErro(requestError, 'Erro ao excluir produto.'),
       )
     } finally {
       setSalvando(false)
@@ -411,7 +416,7 @@ export default function App() {
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
         {erro && (
-          <div className="mb-5 flex items-center justify-between gap-3 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <div role="alert" className="mb-5 flex items-center justify-between gap-3 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
             <div className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />
               <span>{erro}</span>

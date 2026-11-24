@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { AlertTriangle, RefreshCw, Sparkles } from 'lucide-react'
 import { api } from '../services/api'
-import { formatBRL } from '../utils/format'
+import { extrairMensagemErro, formatBRL } from '../utils/format'
 
 export function InsightEstoqueCard({ produtos, onAjustarEstoque, salvando }) {
   const [insight, setInsight] = useState(null)
@@ -16,8 +16,10 @@ export function InsightEstoqueCard({ produtos, onAjustarEstoque, salvando }) {
       setInsight(res.data)
     } catch (requestError) {
       setErro(
-        requestError.response?.data?.detail ||
+        extrairMensagemErro(
+          requestError,
           'Não foi possível gerar os insights de estoque agora.',
+        ),
       )
     } finally {
       setCarregando(false)
@@ -74,7 +76,7 @@ export function InsightEstoqueCard({ produtos, onAjustarEstoque, salvando }) {
       </div>
 
       {erro && (
-        <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs font-medium text-red-700">
+        <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs font-medium text-red-700">
           {erro}
         </p>
       )}

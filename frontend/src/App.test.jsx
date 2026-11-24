@@ -355,29 +355,48 @@ describe('Mercado do Lucca — Fluxos completos com Auth e RBAC', () => {
     fireEvent.click(screen.getByRole('link', { name: /Produtos e Estoque/i }))
     expect(screen.getByText('Catálogo e Controle de Estoque')).toBeInTheDocument()
 
-    // Validações de formulário (nome curto, preço inválido, estoque inválido)
+    // Validações de formulário (nome curto, limites máximos, preço inválido, estoque inválido)
     const form = screen.getByRole('button', { name: 'Cadastrar Produto' }).closest('form')
-    fireEvent.change(screen.getByPlaceholderText('Ex: Café Especial 500g'), { target: { value: 'A' } })
+    const inputNome = screen.getByLabelText('Nome do produto')
+    const inputCategoria = screen.getByLabelText('Categoria')
+    expect(inputNome).toHaveAttribute('maxlength', '100')
+    expect(inputCategoria).toHaveAttribute('maxlength', '50')
+
+    fireEvent.change(inputNome, { target: { value: 'A' } })
     fireEvent.submit(form)
     expect(screen.getByText('Informe um nome com pelo menos 2 caracteres.')).toBeInTheDocument()
 
-    fireEvent.change(screen.getByPlaceholderText('Ex: Café Especial 500g'), { target: { value: 'Leite Integral' } })
-    fireEvent.change(screen.getByDisplayValue('Mercearia'), { target: { value: 'Laticínios' } })
-    fireEvent.change(screen.getByDisplayValue('un (Unidade)'), { target: { value: 'L' } })
-    fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '0' } })
+    fireEvent.change(inputNome, { target: { value: 'X'.repeat(101) } })
+    fireEvent.submit(form)
+    expect(screen.getByText('O nome do produto deve ter no máximo 100 caracteres.')).toBeInTheDocument()
+
+    fireEvent.change(inputNome, { target: { value: 'Leite Integral' } })
+    fireEvent.change(inputCategoria, { target: { value: 'C'.repeat(51) } })
+    fireEvent.submit(form)
+    expect(screen.getByText('A categoria deve ter no máximo 50 caracteres.')).toBeInTheDocument()
+
+    fireEvent.change(inputCategoria, { target: { value: 'Laticínios' } })
+    fireEvent.change(screen.getByLabelText('Unidade'), { target: { value: 'L' } })
+    fireEvent.change(screen.getByLabelText('Preço (R$)'), { target: { value: '0' } })
     fireEvent.submit(form)
     expect(screen.getByText('O preço precisa ser maior que R$ 0,00.')).toBeInTheDocument()
 
-    fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '5.50' } })
-    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '-1' } })
+    fireEvent.change(screen.getByLabelText('Preço (R$)'), { target: { value: '100000000' } })
+    fireEvent.submit(form)
+    expect(screen.getByText('O preço deve ser menor que R$ 100.000.000,00.')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Preço (R$)'), { target: { value: '5.50' } })
+    fireEvent.change(screen.getByLabelText('Estoque inicial'), { target: { value: '-1' } })
     fireEvent.submit(form)
     expect(
       screen.getByText('A quantidade em estoque deve ser um número inteiro maior ou igual a zero.'),
     ).toBeInTheDocument()
 
-    // Erro ao cadastrar na API e depois sucesso
-    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '15' } })
-    api.post.mockRejectedValueOnce({ response: { data: { detail: 'Erro ao salvar produto.' } } })
+    // Erro 422 (lista de erros FastAPI) ao cadastrar na API e depois sucesso
+    fireEvent.change(screen.getByLabelText('Estoque inicial'), { target: { value: '15' } })
+    api.post.mockRejectedValueOnce({
+      response: { data: { detail: [{ msg: 'Erro ao salvar produto.' }] } },
+    })
     fireEvent.submit(form)
     expect(await screen.findByText('Erro ao salvar produto.')).toBeInTheDocument()
 

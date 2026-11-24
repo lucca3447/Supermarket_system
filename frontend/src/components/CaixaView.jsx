@@ -74,7 +74,8 @@ export function CaixaView({
             <div className="relative w-full sm:w-64">
               <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-stone-400" />
               <input
-                type="text"
+                type="search"
+                maxLength={100}
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
                 placeholder="Buscar produto..."
